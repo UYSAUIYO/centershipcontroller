@@ -26,6 +26,9 @@
 
     <!-- 允许读设备等信息，用于问题排查 -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <!-- 增加必要的权限声明 -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 
     <application
         android:allowBackup="true"
@@ -42,6 +45,8 @@
         <meta-data
             android:name="com.amap.api.v2.apikey"
             android:value="b9d17f7049f557f62fd391f630f0fa21" />
+
+
 
         <activity
             android:name=".MainActivity"

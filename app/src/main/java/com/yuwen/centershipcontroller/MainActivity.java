@@ -13,10 +13,10 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import com.amap.api.location.AMapLocation;
 import com.amap.api.location.AMapLocationClient;
-
 import com.amap.api.location.AMapLocationClientOption;
 import com.amap.api.location.AMapLocationListener;
 import com.amap.api.maps.AMap;
+import com.amap.api.maps.CameraUpdate;
 import com.amap.api.maps.CameraUpdateFactory;
 import com.amap.api.maps.LocationSource;
 import com.amap.api.maps.MapView;
@@ -26,7 +26,6 @@ import com.amap.api.maps.model.MyLocationStyle;
 import com.amap.api.services.core.ServiceSettings;
 import com.yuwen.centershipcontroller.Utils.UserSettings;
 import com.yuwen.centershipcontroller.Views.JoystickView;
-
 import com.yuwen.centershipcontroller.Utils.Utils;
 
 import java.text.SimpleDateFormat;
@@ -43,6 +42,7 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
     private static final int REQUEST_PERMISSIONS = 9527;
     private MapView mMapView;//声明一个地图视图对象
     private AMap aMap;
+    MyLocationStyle myLocationStyle;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -94,25 +94,36 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
      * @param savedInstanceState
      */
     private void initMap(Bundle savedInstanceState) {
-        // 隐私合规接口
+        // 确保地图隐私合规接口已调用
         MapsInitializer.updatePrivacyShow(this, true, true);
         MapsInitializer.updatePrivacyAgree(this, true);
 
         // 获取地图视图对象
         mMapView = findViewById(R.id.map);
+        if (mMapView == null) {
+            Log.e("MapError", "MapView is not found in the layout.");
+            return;
+        }
         mMapView.onCreate(savedInstanceState); // 确保调用 onCreate 方法
         if (aMap == null) {
             aMap = mMapView.getMap();
+            if (aMap == null) {
+                Log.e("MapError", "Failed to initialize AMap object.");
+                return;
+            } else {
+                Log.d("MapInit", "AMap object initialized successfully.");
+            }
         }
 
         // 设置定位蓝点样式
         MyLocationStyle myLocationStyle = new MyLocationStyle();
-        myLocationStyle.myLocationType(MyLocationStyle.LOCATION_TYPE_MAP_ROTATE);
+        myLocationStyle.myLocationType(MyLocationStyle.LOCATION_TYPE_FOLLOW);
         myLocationStyle.interval(2000);
         myLocationStyle.showMyLocation(true);
-        myLocationStyle.anchor(0.5f, 0.5f).myLocationType(MyLocationStyle.LOCATION_TYPE_SHOW);
+        myLocationStyle.anchor(0.5f, 0.5f);
         aMap.setMyLocationStyle(myLocationStyle);
         aMap.setMyLocationEnabled(true);
+        Log.d("MapInit", "MyLocationStyle and MyLocationEnabled set successfully.");
     }
 
     private void showUserAgreementDialog() {
@@ -210,6 +221,7 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
                 mlocationClient.setLocationListener(this);//设置定位回调监听
                 mlocationClient.setLocationOption(mLocationOption);//设置定位参数
                 mlocationClient.startLocation();//启动定位
+
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
@@ -241,42 +253,36 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
     public void onLocationChanged(AMapLocation aMapLocation) {
         if (mListener != null && aMapLocation != null) {
             if (aMapLocation.getErrorCode() == 0) {
-                //定位成功回调信息，设置相关消息
-                aMapLocation.getLocationType();//获取当前定位结果来源，如网络定位结果，详见官方定位类型表
-                aMapLocation.getLatitude();//获取纬度
-                aMapLocation.getLongitude();//获取经度
-                aMapLocation.getAccuracy();//获取精度信息
-                SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-                Date date = new Date(aMapLocation.getTime());
-                df.format(date);//定位时间
-                aMapLocation.getAddress();//地址，如果option中设置isNeedAddress为false，则没有此结果，网络定位结果中会有地址信息，GPS定位不返回地址信息。
-                aMapLocation.getCountry();//国家信息
-                aMapLocation.getProvince();//省信息
-                aMapLocation.getCity();//城市信息
-                aMapLocation.getDistrict();//城区信息
-                aMapLocation.getStreet();//街道信息
-                aMapLocation.getStreetNum();//街道门牌号信息
-                aMapLocation.getCityCode();//城市编码
-                aMapLocation.getAdCode();//地区编码
-                // 是否第一次定位
+                // 定位成功回调信息，设置相关消息
+                double latitude = aMapLocation.getLatitude(); // 获取纬度
+                double longitude = aMapLocation.getLongitude(); // 获取经度
+                String address = aMapLocation.getAddress(); // 获取地址信息
+
+                // 更新当前定位点
+                currentLatLng = new LatLng(latitude, longitude);
+
+                // 移动地图中心到定位点，并设置缩放级别为最大值
+                if (aMap != null) {
+                    CameraUpdate cameraUpdate = CameraUpdateFactory.newLatLngZoom(currentLatLng, 3); // 设置缩放级别为最大值
+                    aMap.moveCamera(cameraUpdate);
+                }
+
+                // 如果是第一次定位，通知监听器
                 if (isFirstLoc) {
-                    aMap.moveCamera(CameraUpdateFactory.zoomTo(16));//设置缩放级别
-                    currentLatLng = new LatLng(aMapLocation.getLatitude(), aMapLocation.getLongitude()); //获取当前定位
-                    aMap.moveCamera(CameraUpdateFactory.changeLatLng(currentLatLng));//移动到定位点
-                    //点击定位按钮 能够将地图的中心移动到定位点
                     mListener.onLocationChanged(aMapLocation);
                     isFirstLoc = false;
                 }
 
+                // 添加详细的日志输出
+                Log.d("AmapLocation", "Location updated: Lat=" + latitude + ", Lng=" + longitude + ", Address=" + address);
             } else {
-                //显示错误信息
+                // 显示错误信息
                 Log.e("AmapError", "location Error, ErrCode:"
                         + aMapLocation.getErrorCode() + ", errInfo:"
                         + aMapLocation.getErrorInfo());
             }
         }
     }
-
 
     /**
      * 生命周期-onDestroy
@@ -285,33 +291,27 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
     protected void onDestroy() {
         super.onDestroy();
         mMapView.onDestroy(); // 确保调用 onDestroy 方法
+        Log.d("MapLifecycle", "MapView onDestroy called.");
     }
-    /**
-     * 生命周期-onResume
-     */
+
     @Override
     protected void onResume() {
         super.onResume();
         mMapView.onResume(); // 确保调用 onResume 方法
+        Log.d("MapLifecycle", "MapView onResume called.");
     }
-    /**
-     * 生命周期-onPause
-     */
+
     @Override
     protected void onPause() {
         super.onPause();
         mMapView.onPause(); // 确保调用 onPause 方法
+        Log.d("MapLifecycle", "MapView onPause called.");
     }
-    /**
-     * 生命周期-onSaveInstanceState
-     */
+
     @Override
     protected void onSaveInstanceState(@NonNull Bundle outState) {
         super.onSaveInstanceState(outState);
         mMapView.onSaveInstanceState(outState);//保存地图当前的状态
+        Log.d("MapLifecycle", "MapView onSaveInstanceState called.");
     }
-
-
-
-
 }

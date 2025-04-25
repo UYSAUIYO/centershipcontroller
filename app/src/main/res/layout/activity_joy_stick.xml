@@ -8,8 +8,8 @@
     <!-- 手柄背景图片 -->
     <ImageView
         android:id="@+id/joystick_background"
-        android:layout_width="300dp"
-        android:layout_height="300dp"
+        android:layout_width="205dp"
+        android:layout_height="158dp"
         android:scaleType="centerCrop"
         android:src="@drawable/joystick_background"
         app:layout_constraintBottom_toBottomOf="parent"
