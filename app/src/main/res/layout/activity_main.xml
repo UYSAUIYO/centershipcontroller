@@ -90,4 +90,21 @@
         android:onClick="onSettingClick"
         android:src="@drawable/setting" />
 
+    <com.yuwen.centershipcontroller.Views.DeviceInfoCard
+        android:layout_width="384dp"
+        android:layout_height="304dp"
+        app:cardCornerRadius="25dp"
+        app:deviceId="1050J9G4F3"
+        app:deviceImage="@drawable/shipdemo"
+        app:deviceTitle="人工湖001"
+        app:deviceType="CL-0089"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="0.22"
+        app:workArea="人工湖"
+        app:workStatus="正常" />
+
 </androidx.constraintlayout.widget.ConstraintLayout>

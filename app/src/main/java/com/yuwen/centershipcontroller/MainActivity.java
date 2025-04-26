@@ -173,16 +173,16 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
 
     // 如果需要将控制值传递到其他组件，可以添加这样的方法
 
-    private void updateControlValues(float length, float angle) {
+    private void updateControlValues(int length, int angle) {
         TextView lengthText = findViewById(R.id.textView);
         TextView angleText = findViewById(R.id.textView2);
 
         if (lengthText != null) {
-            lengthText.setText("Length: " + String.format("%.1f", length));
+            lengthText.setText("Length: " + String.format("%d", length));
         }
 
         if (angleText != null) {
-            angleText.setText("Angle: " + String.format("%.1f", angle));
+            angleText.setText("Angle: " + String.format("%d", angle));
         }
     }
 
@@ -214,7 +214,6 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
 
         if (EasyPermissions.hasPermissions(this, permissions)) {
             //true 有权限 开始定位
-            Toast.makeText(MainActivity.this, "已获得权限，可以定位啦！", Toast.LENGTH_LONG).show();
             Utils.showMsg(MainActivity.this,"已获得权限，可以定位啦！");
         } else {
             //false 无权限
@@ -224,7 +223,7 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
 
     private LocationSource.OnLocationChangedListener mListener;//声明位置监听
     private AMapLocationClient mlocationClient;//声明定位客户端
-    private AMapLocationClientOption mLocationOption;//声明定位参数配置选项
+
     /**
      * 激活定位
      */
@@ -234,7 +233,8 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
         if (mlocationClient == null) {
             //初始化定位
             try {
-                mLocationOption = new AMapLocationClientOption();//初始化定位参数
+                //声明定位参数配置选项
+                AMapLocationClientOption mLocationOption = new AMapLocationClientOption();//初始化定位参数
                 mLocationOption.setLocationMode(AMapLocationClientOption.AMapLocationMode.Hight_Accuracy);//设置为高精度定位模式
                 mlocationClient = new AMapLocationClient(this);//声明定位客户端
                 mlocationClient.setLocationListener(this);//设置定位回调监听
