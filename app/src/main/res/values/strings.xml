@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">船舶控制平台</string>
+    <string name="change_map">地图切换</string>
 </resources>

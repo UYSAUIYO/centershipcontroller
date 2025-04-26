@@ -44,4 +44,6 @@ dependencies {
     androidTestImplementation libs.espresso.core
     implementation libs.java.websocket
     implementation libs.easypermissions
+    implementation(libs.preference)
+    implementation(libs.preference.ktx)
 }

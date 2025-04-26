@@ -2,8 +2,12 @@ package com.yuwen.centershipcontroller;
 
 import android.Manifest;
 import android.app.Activity;
+import android.content.Intent;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.View;
+import android.view.WindowManager;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -24,6 +28,7 @@ import com.amap.api.maps.MapsInitializer;
 import com.amap.api.maps.model.LatLng;
 import com.amap.api.maps.model.MyLocationStyle;
 import com.amap.api.services.core.ServiceSettings;
+import com.yuwen.centershipcontroller.Activity.SettingsActivity;
 import com.yuwen.centershipcontroller.Utils.UserSettings;
 import com.yuwen.centershipcontroller.Views.JoystickView;
 import com.yuwen.centershipcontroller.Utils.Utils;
@@ -42,11 +47,20 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
     private static final int REQUEST_PERMISSIONS = 9527;
     private MapView mMapView;//声明一个地图视图对象
     private AMap aMap;
-    MyLocationStyle myLocationStyle;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        // 设置透明顶部栏和系统状态栏
+        getWindow().setFlags(
+            WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS,
+            WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS
+        );
+        getWindow().getDecorView().setSystemUiVisibility(
+            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+        );
+
         setContentView(R.layout.activity_main);
 
         // 确保加载高德地图的原生库
@@ -124,6 +138,11 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
         aMap.setMyLocationStyle(myLocationStyle);
         aMap.setMyLocationEnabled(true);
         Log.d("MapInit", "MyLocationStyle and MyLocationEnabled set successfully.");
+    }
+
+    public void onSettingClick(View view) {
+        Intent intent = new Intent(this, SettingsActivity.class);
+        startActivity(intent);
     }
 
     private void showUserAgreementDialog() {
