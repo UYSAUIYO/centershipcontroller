@@ -1,13 +1,13 @@
 package com.yuwen.centershipcontroller;
 
 import android.Manifest;
-import android.app.Activity;
 import android.content.Intent;
+import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
+import android.view.WindowInsetsController;
 import android.view.WindowManager;
-import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -30,11 +30,9 @@ import com.amap.api.maps.model.MyLocationStyle;
 import com.amap.api.services.core.ServiceSettings;
 import com.yuwen.centershipcontroller.Activity.SettingsActivity;
 import com.yuwen.centershipcontroller.Utils.UserSettings;
+import com.yuwen.centershipcontroller.Views.DeviceInfoCard;
 import com.yuwen.centershipcontroller.Views.JoystickView;
 import com.yuwen.centershipcontroller.Utils.Utils;
-
-import java.text.SimpleDateFormat;
-import java.util.Date;
 
 import pub.devrel.easypermissions.AfterPermissionGranted;
 import pub.devrel.easypermissions.EasyPermissions;
@@ -48,18 +46,56 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
     private MapView mMapView;//声明一个地图视图对象
     private AMap aMap;
 
+    private DeviceInfoCard deviceInfoCard;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
         // 设置透明顶部栏和系统状态栏
-        getWindow().setFlags(
-            WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS,
-            WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS
-        );
-        getWindow().getDecorView().setSystemUiVisibility(
-            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-        );
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            // 使用 WindowInsetsController 替代过时的 SYSTEM_UI_FLAG
+            try {
+                getWindow().setDecorFitsSystemWindows(false);
+                WindowInsetsController insetsController = getWindow().getInsetsController();
+                if (insetsController != null) {
+                    insetsController.setSystemBarsAppearance(
+                            WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS,
+                            WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
+                    );
+                    insetsController.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+                } else {
+                    Log.e("UIError", "WindowInsetsController is null. Falling back to legacy flags.");
+                    // 回退到旧的 SYSTEM_UI_FLAG 实现
+                    getWindow().setFlags(
+                            WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS,
+                            WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS
+                    );
+                    getWindow().getDecorView().setSystemUiVisibility(
+                            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                    );
+                }
+            } catch (Exception e) {
+                Log.e("UIError", "Failed to set system UI flags: " + e.getMessage());
+                // 回退到旧的 SYSTEM_UI_FLAG 实现
+                getWindow().setFlags(
+                        WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS,
+                        WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS
+                );
+                getWindow().getDecorView().setSystemUiVisibility(
+                        View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                );
+            }
+        } else {
+            // 兼容低版本 API
+            getWindow().setFlags(
+                    WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS,
+                    WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS
+            );
+            getWindow().getDecorView().setSystemUiVisibility(
+                    View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+            );
+        }
 
         setContentView(R.layout.activity_main);
 
@@ -101,6 +137,9 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
         if (userSettings.checkFirstRun()) {
             showUserAgreementDialog();
         }
+        deviceInfoCard =findViewById(R.id.device_card);
+        deviceInfoCard.setBatteryLevel(50);
+        deviceInfoCard.setBatteryStatus(false);
     }
 
     /**
@@ -280,8 +319,9 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
                 // 更新当前定位点
                 currentLatLng = new LatLng(latitude, longitude);
 
-                // 移动地图中心到定位点，并设置缩放级别为最大值
-                if (aMap != null) {
+                // 判断定位点是否在当前地图显示范围内
+                if (aMap != null && !aMap.getProjection().getVisibleRegion().latLngBounds.contains(currentLatLng)) {
+                    // 如果定位点不在当前地图显示范围内，则更新地图中心点
                     CameraUpdate cameraUpdate = CameraUpdateFactory.newLatLngZoom(currentLatLng, 3); // 设置缩放级别为最大值
                     aMap.moveCamera(cameraUpdate);
                 }
@@ -302,6 +342,7 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
             }
         }
     }
+
 
     /**
      * 生命周期-onDestroy

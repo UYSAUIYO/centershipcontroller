@@ -74,6 +74,12 @@
         app:layout_constraintVertical_bias="0.167" />
 
     <ImageView
+        android:id="@+id/battery_icon"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        tools:src="@android:drawable/ic_lock_idle_charging" />
+
+    <ImageView
         android:id="@+id/bt_setting"
         android:layout_width="34dp"
         android:layout_height="34dp"
@@ -91,20 +97,21 @@
         android:src="@drawable/setting" />
 
     <com.yuwen.centershipcontroller.Views.DeviceInfoCard
-        android:layout_width="384dp"
-        android:layout_height="304dp"
-        app:cardCornerRadius="25dp"
+        android:id="@+id/device_card"
+        android:layout_width="390dp"
+        android:layout_height="237dp"
+        android:background="@android:color/transparent"
         app:deviceId="1050J9G4F3"
         app:deviceImage="@drawable/shipdemo"
         app:deviceTitle="人工湖001"
         app:deviceType="CL-0089"
+        app:workArea="人工湖"
+        app:workStatus="正常"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintHorizontal_bias="0"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintVertical_bias="0.22"
-        app:workArea="人工湖"
-        app:workStatus="正常" />
+        app:layout_constraintVertical_bias="0.22" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

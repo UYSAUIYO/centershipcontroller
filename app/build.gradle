@@ -46,4 +46,10 @@ dependencies {
     implementation libs.easypermissions
     implementation(libs.preference)
     implementation(libs.preference.ktx)
+    implementation(libs.okhttp)
+    implementation libs.mmkv
+    implementation(libs.eventbus)
+    implementation libs.gson
+    implementation libs.dialogx
+    implementation libs.utilcodex
 }

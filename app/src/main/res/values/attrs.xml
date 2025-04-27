@@ -9,5 +9,6 @@
         <attr name="workStatus" format="string" />
         <attr name="batteryIcon" format="reference" />
         <attr name="buttonText" format="string" />
+        <attr name="batteryStatus" format="boolean" />
     </declare-styleable>
 </resources>
