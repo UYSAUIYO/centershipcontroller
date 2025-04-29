@@ -6,4 +6,8 @@
     <string name="charning">充电中</string>
     <string name="nocharning">放电中</string>
     <string name="devices_model">设备型号：%s</string>
+    <string name="back">返回</string>
+    <string name="sao1sao">扫一扫</string>
+    <string name="flash">闪光灯</string>
+    <string name="pic_sheet">相册</string>
 </resources>
