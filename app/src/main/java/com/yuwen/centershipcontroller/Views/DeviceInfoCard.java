@@ -7,6 +7,7 @@ import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.TextView;
@@ -15,6 +16,7 @@ import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.cardview.widget.CardView;
+import androidx.constraintlayout.widget.ConstraintLayout;
 
 import com.yuwen.centershipcontroller.R;
 
@@ -41,6 +43,41 @@ public class DeviceInfoCard extends CardView {
     public DeviceInfoCard(@NonNull Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
         init(context, attrs);
+
+        // 添加触摸事件监听器以支持拖动功能
+        setOnTouchListener((v, event) -> {
+            switch (event.getAction()) {
+                case MotionEvent.ACTION_DOWN:
+                    // 记录初始触摸位置
+                    startX = event.getRawX();
+                    startY = event.getRawY();
+                    break;
+                case MotionEvent.ACTION_MOVE:
+                    // 计算移动的距离
+                    float dx = event.getRawX() - startX;
+                    float dy = event.getRawY() - startY;
+
+                    // 更新组件的位置
+                    ConstraintLayout.LayoutParams params = (ConstraintLayout.LayoutParams) getLayoutParams();
+                    params.leftMargin += (int) dx;
+                    params.topMargin += (int) dy;
+                    setLayoutParams(params);
+
+                    // 更新起始位置
+                    startX = event.getRawX();
+                    startY = event.getRawY();
+                    break;
+                case MotionEvent.ACTION_UP:
+                    // 检测是否为点击事件
+                    float moveDistanceX = Math.abs(event.getRawX() - startX);
+                    float moveDistanceY = Math.abs(event.getRawY() - startY);
+                    if (moveDistanceX < 10 && moveDistanceY < 10) { // 点击阈值
+                        performClick(); // 调用 performClick 以支持 Accessibility
+                    }
+                    break;
+            }
+            return true; // 消费触摸事件
+        });
     }
     public DeviceInfoCard(@NonNull Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
@@ -211,4 +248,9 @@ public class DeviceInfoCard extends CardView {
     public void setActionButtonClickListener(OnClickListener listener) {
         actionButton.setOnClickListener(listener);
     }
+
+    // 新增变量用于记录触摸起始位置
+    private float startX;
+    private float startY;
+
 }

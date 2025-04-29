@@ -52,4 +52,5 @@ dependencies {
     implementation libs.gson
     implementation libs.dialogx
     implementation libs.utilcodex
+    implementation libs.zxing.lite
 }

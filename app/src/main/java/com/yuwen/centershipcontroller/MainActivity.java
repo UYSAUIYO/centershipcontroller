@@ -43,6 +43,7 @@ import pub.devrel.easypermissions.EasyPermissions;
 public class MainActivity extends AppCompatActivity implements LocationSource, AMapLocationListener {
     //请求权限码
     private static final int REQUEST_PERMISSIONS = 9527;
+    private static final int REQUEST_CAMERA_PERMISSION = 9528; // 新增摄像头权限请求码
     private MapView mMapView;//声明一个地图视图对象
     private AMap aMap;
 
@@ -137,7 +138,8 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
         if (userSettings.checkFirstRun()) {
             showUserAgreementDialog();
         }
-        deviceInfoCard =findViewById(R.id.device_card);
+        deviceInfoCard = findViewById(R.id.device_card);
+        deviceInfoCard.setDeviceTitle("人工湖001"); // 确保传入的字符串是有效的 BufferType 枚举值
         deviceInfoCard.setBatteryLevel(50);
         deviceInfoCard.setBatteryStatus(false);
     }
@@ -168,6 +170,9 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
             }
         }
 
+        // 隐藏高德地图Logo（通过调整边距实现）
+        aMap.getUiSettings().setLogoBottomMargin(-100); // 负值将Logo移出屏幕下边界
+
         // 设置定位蓝点样式
         MyLocationStyle myLocationStyle = new MyLocationStyle();
         myLocationStyle.myLocationType(MyLocationStyle.LOCATION_TYPE_FOLLOW);
@@ -179,9 +184,37 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
         Log.d("MapInit", "MyLocationStyle and MyLocationEnabled set successfully.");
     }
 
+    /**
+     * 动态请求摄像头权限（兼容不同Android版本）
+     */
+    @AfterPermissionGranted(REQUEST_CAMERA_PERMISSION)
+    public void requestCameraPermission() {
+        String[] perms;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) { 
+            // Android 13+ 使用 READ_MEDIA_IMAGES/VIDEO 替代旧权限
+            perms = new String[]{Manifest.permission.CAMERA, Manifest.permission.READ_MEDIA_IMAGES};
+        } else {
+            perms = new String[]{Manifest.permission.CAMERA, Manifest.permission.WRITE_EXTERNAL_STORAGE};
+        }
+
+        if (EasyPermissions.hasPermissions(this, perms)) {
+            // 权限已授予，可执行相关操作
+            Toast.makeText(this, "相机权限已就绪", Toast.LENGTH_SHORT).show();
+            // 调用摄像头功能...
+        } else {
+            EasyPermissions.requestPermissions(this, "需要访问相机和媒体文件", REQUEST_CAMERA_PERMISSION, perms);
+        }
+    }
+
+    /**
+     * 示例：在设置菜单点击时请求权限
+     */
     public void onSettingClick(View view) {
         Intent intent = new Intent(this, SettingsActivity.class);
         startActivity(intent);
+        
+        // 示例触发权限请求（实际应根据业务场景调用）
+        requestCameraPermission(); 
     }
 
     private void showUserAgreementDialog() {
@@ -252,10 +285,14 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
         };
 
         if (EasyPermissions.hasPermissions(this, permissions)) {
-            //true 有权限 开始定位
-            Utils.showMsg(MainActivity.this,"已获得权限，可以定位啦！");
+            // true 有权限 开始定位
+            Utils.showMsg(MainActivity.this, "已获得权限，可以定位啦！");
+            // 新增：重新启用地图定位功能
+            if (aMap != null) {
+                aMap.setMyLocationEnabled(true);
+            }
         } else {
-            //false 无权限
+            // false 无权限
             EasyPermissions.requestPermissions(this, "需要权限", REQUEST_PERMISSIONS, permissions);
         }
     }
@@ -270,20 +307,20 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
     public void activate(LocationSource.OnLocationChangedListener listener) {
         mListener = listener;
         if (mlocationClient == null) {
-            //初始化定位
+            // 初始化定位
             try {
-                //声明定位参数配置选项
-                AMapLocationClientOption mLocationOption = new AMapLocationClientOption();//初始化定位参数
-                mLocationOption.setLocationMode(AMapLocationClientOption.AMapLocationMode.Hight_Accuracy);//设置为高精度定位模式
-                mlocationClient = new AMapLocationClient(this);//声明定位客户端
-                mlocationClient.setLocationListener(this);//设置定位回调监听
-                mlocationClient.setLocationOption(mLocationOption);//设置定位参数
-                mlocationClient.startLocation();//启动定位
-
+                AMapLocationClientOption mLocationOption = new AMapLocationClientOption();
+                mLocationOption.setLocationMode(AMapLocationClientOption.AMapLocationMode.Hight_Accuracy);
+                mlocationClient = new AMapLocationClient(this);
+                mlocationClient.setLocationListener(this);
+                mlocationClient.setLocationOption(mLocationOption);
+                mlocationClient.startLocation();
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
-
+        } else {
+            // 新增：确保定位服务已启动
+            mlocationClient.startLocation();
         }
     }
 
