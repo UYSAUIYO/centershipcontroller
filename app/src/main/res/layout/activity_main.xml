@@ -82,6 +82,22 @@
         android:focusable="true"
         android:onClick="onSettingClick"
         android:src="@drawable/setting" />
+    <ImageView
+        android:id="@+id/bt_setting"
+        android:layout_width="34dp"
+        android:layout_height="34dp"
+        android:scaleType="centerInside"
+        android:visibility="visible"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.942"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="0.028"
+        android:clickable="true"
+        android:focusable="true"
+        android:onClick="onScannerClick"
+        android:src="@drawable/scanner" />
 
     <com.yuwen.centershipcontroller.Views.DeviceInfoCard
         android:id="@+id/device_card"

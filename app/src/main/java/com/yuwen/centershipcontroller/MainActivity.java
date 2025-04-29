@@ -33,6 +33,7 @@ import com.yuwen.centershipcontroller.Utils.UserSettings;
 import com.yuwen.centershipcontroller.Views.DeviceInfoCard;
 import com.yuwen.centershipcontroller.Views.JoystickView;
 import com.yuwen.centershipcontroller.Utils.Utils;
+import com.yuwen.centershipcontroller.Views.QR_codeScanner;
 
 import pub.devrel.easypermissions.AfterPermissionGranted;
 import pub.devrel.easypermissions.EasyPermissions;
@@ -411,4 +412,16 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
         mMapView.onSaveInstanceState(outState);//保存地图当前的状态
         Log.d("MapLifecycle", "MapView onSaveInstanceState called.");
     }
+
+    public void onScannerClick(View view) {
+    if (EasyPermissions.hasPermissions(this, Manifest.permission.CAMERA)) {
+        // 摄像头权限已授予，可以启动扫描器
+        Intent intent = new Intent(this, QR_codeScanner.class);
+        startActivity(intent);
+    } else {
+        // 请求摄像头权限
+        requestCameraPermission();
+    }
+}
+
 }
