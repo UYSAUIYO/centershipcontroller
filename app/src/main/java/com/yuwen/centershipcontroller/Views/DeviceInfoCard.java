@@ -4,18 +4,20 @@ import android.content.Context;
 import android.content.res.TypedArray;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
+import android.view.View;
 import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.cardview.widget.CardView;
 import androidx.constraintlayout.widget.ConstraintLayout;
 
 import com.yuwen.centershipcontroller.R;
@@ -23,8 +25,7 @@ import com.yuwen.centershipcontroller.R;
 /**
  * @author yuwen
  */
-public class DeviceInfoCard extends CardView {
-
+public class DeviceInfoCard extends FrameLayout {
     private ImageView deviceImage;
     private TextView deviceTitle;
     private TextView deviceId;
@@ -34,7 +35,6 @@ public class DeviceInfoCard extends CardView {
     private ImageView batteryIcon;
     private Button actionButton;
     private TextView batteryStatus;
-
     // 构造函数
     public DeviceInfoCard(@NonNull Context context) {
         super(context);
@@ -43,7 +43,6 @@ public class DeviceInfoCard extends CardView {
     public DeviceInfoCard(@NonNull Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
         init(context, attrs);
-
         // 添加触摸事件监听器以支持拖动功能
         setOnTouchListener((v, event) -> {
             switch (event.getAction()) {
@@ -56,13 +55,11 @@ public class DeviceInfoCard extends CardView {
                     // 计算移动的距离
                     float dx = event.getRawX() - startX;
                     float dy = event.getRawY() - startY;
-
                     // 更新组件的位置
                     ConstraintLayout.LayoutParams params = (ConstraintLayout.LayoutParams) getLayoutParams();
                     params.leftMargin += (int) dx;
                     params.topMargin += (int) dy;
                     setLayoutParams(params);
-
                     // 更新起始位置
                     startX = event.getRawX();
                     startY = event.getRawY();
@@ -83,70 +80,72 @@ public class DeviceInfoCard extends CardView {
         super(context, attrs, defStyleAttr);
         init(context, attrs);
     }
-
     private void init(Context context, AttributeSet attrs) {
-    // 加载布局
-    LayoutInflater.from(context).inflate(R.layout.device_info_card, this, true);
+        // 确保父布局是透明的
+        setBackgroundColor(Color.TRANSPARENT);
 
-    // 初始化视图
-    deviceImage = findViewById(R.id.device_image);
-    deviceTitle = findViewById(R.id.device_title);
-    deviceType = findViewById(R.id.device_type);
-    deviceId = findViewById(R.id.device_id);
-    workArea = findViewById(R.id.work_area);
-    workStatus = findViewById(R.id.work_status);
-    batteryIcon = findViewById(R.id.battery_icon);
-    actionButton = findViewById(R.id.action_button);
-    batteryStatus = findViewById(R.id.battery_type);
+        // 加载布局
+        View root = LayoutInflater.from(context).inflate(R.layout.device_info_card, this, true);
 
-    // 如果有自定义属性，解析它们
-    if (attrs != null) {
-        try (TypedArray typedArray = context.obtainStyledAttributes(attrs, R.styleable.DeviceInfoCard)) {
-
-            // 设置设备图片
-            Drawable deviceDrawable = typedArray.getDrawable(R.styleable.DeviceInfoCard_deviceImage);
-            if (deviceDrawable != null) {
-                deviceImage.setImageDrawable(deviceDrawable);
+        // 给根视图设置圆角背景
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setColor(Color.WHITE);
+        drawable.setCornerRadius(context.getResources().getDimensionPixelSize(R.dimen.card_corner_radius));
+        // 添加阴影效果，API 21及以上支持
+        root.setElevation(context.getResources().getDimensionPixelSize(R.dimen.card_elevation));
+        root.setBackground(drawable);
+        // 初始化视图
+        deviceImage = findViewById(R.id.device_image);
+        deviceTitle = findViewById(R.id.device_title);
+        deviceType = findViewById(R.id.device_type);
+        deviceId = findViewById(R.id.device_id);
+        workArea = findViewById(R.id.work_area);
+        workStatus = findViewById(R.id.work_status);
+        batteryIcon = findViewById(R.id.battery_icon);
+        actionButton = findViewById(R.id.action_button);
+        batteryStatus = findViewById(R.id.battery_type);
+        // 如果有自定义属性，解析它们
+        if (attrs != null) {
+            try (TypedArray typedArray = context.obtainStyledAttributes(attrs, R.styleable.DeviceInfoCard)) {
+                // 设置设备图片
+                Drawable deviceDrawable = typedArray.getDrawable(R.styleable.DeviceInfoCard_deviceImage);
+                if (deviceDrawable != null) {
+                    deviceImage.setImageDrawable(deviceDrawable);
+                }
+                // 设置标题
+                String title = typedArray.getString(R.styleable.DeviceInfoCard_deviceTitle);
+                if (title != null) {
+                    deviceTitle.setText(title);
+                }
+                // 设置设备类型
+                String type = typedArray.getString(R.styleable.DeviceInfoCard_deviceType);
+                if (type != null) {
+                    deviceType.setText(type);
+                }
+                // 设置设备ID
+                String id = typedArray.getString(R.styleable.DeviceInfoCard_deviceId);
+                if (id != null) {
+                    deviceId.setText(id);
+                }
+                // 新增：设置工作区域
+                String area = typedArray.getString(R.styleable.DeviceInfoCard_workArea);
+                if (area != null) {
+                    workArea.setText(area);
+                }
+                // 新增：设置工作状态
+                String status = typedArray.getString(R.styleable.DeviceInfoCard_workStatus);
+                if (status != null) {
+                    workStatus.setText(status);
+                }
+                if (batteryStatus != null) {
+                    batteryStatus.setText(status);
+                }
+            } catch (Exception e) {
+                // 捕获并处理可能的异常（如资源解析失败）
+                Log.e("DeviceInfoCard", "Error while setting device image.", e);
             }
-
-            // 设置标题
-            String title = typedArray.getString(R.styleable.DeviceInfoCard_deviceTitle);
-            if (title != null) {
-                deviceTitle.setText(title);
-            }
-
-            // 设置设备类型
-            String type = typedArray.getString(R.styleable.DeviceInfoCard_deviceType);
-            if (type != null) {
-                deviceType.setText(type);
-            }
-
-            // 设置设备ID
-            String id = typedArray.getString(R.styleable.DeviceInfoCard_deviceId);
-            if (id != null) {
-                deviceId.setText(id);
-            }
-
-            // 新增：设置工作区域
-            String area = typedArray.getString(R.styleable.DeviceInfoCard_workArea);
-            if (area != null) {
-                workArea.setText(area);
-            }
-
-            // 新增：设置工作状态
-            String status = typedArray.getString(R.styleable.DeviceInfoCard_workStatus);
-            if (status != null) {
-                workStatus.setText(status);
-            }
-            if (batteryStatus != null) {
-                batteryStatus.setText(status);
-            }
-        } catch (Exception e) {
-            // 捕获并处理可能的异常（如资源解析失败）
-            Log.e("DeviceInfoCard", "Error while setting device image.", e);
         }
     }
-}
 
 
     // 公共方法，用于设置设备图片

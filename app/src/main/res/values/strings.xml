@@ -10,4 +10,8 @@
     <string name="sao1sao">扫一扫</string>
     <string name="flash">闪光灯</string>
     <string name="pic_sheet">相册</string>
+    <string name="title">标题</string>
+    <string name="content">消息内容</string>
+    <string name="cancel">取消</string>
+    <string name="OK">确定</string>
 </resources>

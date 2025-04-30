@@ -16,9 +16,11 @@ import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.Image;
 import android.media.ImageReader;
+import android.media.MediaPlayer;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.Looper;
 import android.util.Log;
 import android.util.Size;
 import android.view.Surface;
@@ -44,7 +46,10 @@ import com.google.zxing.NotFoundException;
 import com.google.zxing.PlanarYUVLuminanceSource;
 import com.google.zxing.Result;
 import com.google.zxing.common.HybridBinarizer;
+import com.yuwen.centershipcontroller.Component.CustomDialog;
 import com.yuwen.centershipcontroller.R;
+import com.yuwen.centershipcontroller.Utils.QRCodeResultHandler;
+import com.yuwen.centershipcontroller.Utils.WebSocketManager;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -567,16 +572,12 @@ public class QR_codeScanner extends AppCompatActivity {
 
         // 播放成功声音
         try {
-            android.media.MediaPlayer mediaPlayer = android.media.MediaPlayer.create(this, R.raw.notification_default_ringtone);
+            MediaPlayer mediaPlayer = MediaPlayer.create(this, R.raw.notification_default_ringtone);
             mediaPlayer.start();
             mediaPlayer.setOnCompletionListener(mp -> mp.release());
         } catch (Exception e) {
             Log.e(TAG, "播放提示音失败", e);
         }
-
-        // 显示结果
-        scanResultText.setText("扫描结果: " + result);
-        scanResultText.setVisibility(View.VISIBLE);
 
         // 震动反馈
         try {
@@ -592,29 +593,107 @@ public class QR_codeScanner extends AppCompatActivity {
             Log.e(TAG, "震动反馈失败", e);
         }
 
-        // 延迟2秒后隐藏结果，继续扫描
-        new Handler().postDelayed(() -> {
-            scanResultText.setVisibility(View.GONE);
-            processingBarcode = false; // 允许继续扫描
-        }, 2000);
+        // 显示初始结果
+        scanResultText.setText("扫描成功，正在处理...");
+        scanResultText.setVisibility(View.VISIBLE);
 
-        // 可选：根据扫描结果进行处理或跳转
-        // 这里可以添加自定义的处理逻辑，例如打开网页、解析特定格式等
+        // 使用QRCodeResultHandler处理结果
+        QRCodeResultHandler resultHandler = new QRCodeResultHandler(this, new QRCodeResultHandler.QRResultCallback() {
+            @Override
+            public void onNormalResult(String result) {
+                // 普通扫描结果
+                runOnUiThread(() -> {
+                    scanResultText.setText("扫描结果: " + result);
 
-        // 打印日志
-        Log.d(TAG, "扫描到二维码: " + result);
+                    // 延迟2秒后隐藏结果，继续扫描
+                    new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                        scanResultText.setVisibility(View.GONE);
+                        processingBarcode = false;
+                    }, 2000);
+                });
+            }
 
-        // 如果需要将结果传回调用活动，可以添加如下代码：
-        // Intent resultIntent = new Intent();
-        // resultIntent.putExtra("SCAN_RESULT", result);
-        // setResult(Activity.RESULT_OK, resultIntent);
-        // finish();
+            @Override
+            public void onProcessing(String message) {
+                // 正在处理连接
+                runOnUiThread(() -> {
+                    scanResultText.setText(message);
+
+                    // 显示连接中对话框
+                    CustomDialog dialog = new CustomDialog(QR_codeScanner.this);
+                    dialog.setTitle("连接");
+                    dialog.setMessage("正在连接到远程服务器...");
+                    dialog.showLoadingIcon();
+                    dialog.hideNegativeButton();
+                    dialog.setPositiveButton("取消", v -> {
+                        WebSocketManager.getInstance().disconnect();
+                        dialog.dismiss();
+                        processingBarcode = false;
+                    });
+                    dialog.setCancelable(false);
+                    dialog.show();
+                });
+            }
+
+            @Override
+            public void onConnectionSuccess(String message) {
+                // WebSocket连接成功
+                runOnUiThread(() -> {
+                    // 显示成功对话框
+                    CustomDialog dialog = new CustomDialog(QR_codeScanner.this);
+                    dialog.setTitle("连接成功");
+                    dialog.setMessage("已成功连接到远程服务器");
+                    dialog.showSuccessIcon();
+                    dialog.hideNegativeButton();
+                    dialog.setPositiveButton("确定", v -> {
+                        dialog.dismiss();
+                        // 返回主页面
+                        finish();
+                    });
+                    dialog.autoDismiss(3000);// 3秒后自动关闭
+                    dialog.setCancelable(false);
+                    dialog.show();
+                });
+            }
+
+            @Override
+            public void onConnectionFailure(String error) {
+                // WebSocket连接失败
+                runOnUiThread(() -> {
+                    // 显示失败对话框
+                    CustomDialog dialog = new CustomDialog(QR_codeScanner.this);
+                    dialog.setTitle("连接失败");
+                    dialog.setMessage("无法连接到服务器: " + error);
+                    dialog.showErrorIcon();
+                    dialog.hideNegativeButton();
+                    dialog.setPositiveButton("确定", v -> {
+                        dialog.dismiss();
+                        processingBarcode = false;
+                    });
+                    dialog.setCancelable(false);
+                    dialog.show();
+                });
+            }
+
+            @Override
+            public void onError(String error) {
+                // 处理错误
+                runOnUiThread(() -> {
+                    scanResultText.setText("错误: " + error);
+
+                    // 延迟2秒后隐藏结果，继续扫描
+                    new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                        scanResultText.setVisibility(View.GONE);
+                        processingBarcode = false;
+                    },2000);
+                });
+            }
+        });
+
+        // 处理扫描结果
+        resultHandler.processResult(result);
     }
 
-
-    /**
-     * 选择最优的预览尺寸
-     */
     /**
      * 选择最优的预览尺寸
      */

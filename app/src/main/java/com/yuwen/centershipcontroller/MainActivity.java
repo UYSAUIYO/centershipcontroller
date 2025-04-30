@@ -30,9 +30,9 @@ import com.amap.api.maps.model.MyLocationStyle;
 import com.amap.api.services.core.ServiceSettings;
 import com.yuwen.centershipcontroller.Activity.SettingsActivity;
 import com.yuwen.centershipcontroller.Utils.UserSettings;
+import com.yuwen.centershipcontroller.Utils.Utils;
 import com.yuwen.centershipcontroller.Views.DeviceInfoCard;
 import com.yuwen.centershipcontroller.Views.JoystickView;
-import com.yuwen.centershipcontroller.Utils.Utils;
 import com.yuwen.centershipcontroller.Views.QR_codeScanner;
 
 import pub.devrel.easypermissions.AfterPermissionGranted;
@@ -191,12 +191,8 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
     @AfterPermissionGranted(REQUEST_CAMERA_PERMISSION)
     public void requestCameraPermission() {
         String[] perms;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) { 
-            // Android 13+ 使用 READ_MEDIA_IMAGES/VIDEO 替代旧权限
-            perms = new String[]{Manifest.permission.CAMERA, Manifest.permission.READ_MEDIA_IMAGES};
-        } else {
-            perms = new String[]{Manifest.permission.CAMERA, Manifest.permission.WRITE_EXTERNAL_STORAGE};
-        }
+        // Android 13+ 使用 READ_MEDIA_IMAGES/VIDEO 替代旧权限
+        perms = new String[]{Manifest.permission.CAMERA, Manifest.permission.READ_MEDIA_IMAGES};
 
         if (EasyPermissions.hasPermissions(this, perms)) {
             // 权限已授予，可执行相关操作
