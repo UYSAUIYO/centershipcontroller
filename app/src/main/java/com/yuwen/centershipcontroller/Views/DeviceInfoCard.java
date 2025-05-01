@@ -23,17 +23,31 @@ import androidx.constraintlayout.widget.ConstraintLayout;
 import com.yuwen.centershipcontroller.R;
 
 /**
+ * 自定义设备信息卡片视图组件，继承自FrameLayout。
+ * 用于显示设备的基本信息，包括设备图片、名称、ID、类型、工作区域、工作状态和电池状态等。
+ * 支持拖拽功能，可以在父布局中自由移动位置。
+ * 
  * @author yuwen
+ * @version 1.0
  */
 public class DeviceInfoCard extends FrameLayout {
+    /** 设备图片显示控件 */
     private ImageView deviceImage;
+    /** 设备名称显示控件 */
     private TextView deviceTitle;
+    /** 设备ID显示控件 */
     private TextView deviceId;
+    /** 设备类型显示控件 */
     private TextView deviceType;
+    /** 工作区域显示控件 */
     private TextView workArea;
+    /** 工作状态显示控件 */
     private TextView workStatus;
+    /** 电池图标显示控件 */
     private ImageView batteryIcon;
+    /** 操作按钮控件 */
     private Button actionButton;
+    /** 电池状态显示控件 */
     private TextView batteryStatus;
     // 构造函数
     public DeviceInfoCard(@NonNull Context context) {
@@ -149,44 +163,91 @@ public class DeviceInfoCard extends FrameLayout {
 
 
     // 公共方法，用于设置设备图片
+    /**
+     * 设置设备图片
+     *
+     * @param drawable 要设置的图片Drawable对象
+     */
     public void setDeviceImage(Drawable drawable) {
         deviceImage.setImageDrawable(drawable);
     }
 
+    /**
+     * 设置设备图片资源
+     *
+     * @param resId 图片资源ID
+     */
     public void setDeviceImage(@DrawableRes int resId) {
         deviceImage.setImageResource(resId);
     }
 
     // 设置设备名称
+    /**
+     * 设置设备名称
+     *
+     * @param title 设备名称
+     */
     public void setDeviceTitle(String title) {
         deviceTitle.setText(title);
     }
 
     // 设置设备ID
+    /**
+     * 设置设备ID
+     *
+     * @param id 设备ID
+     */
     public void setDeviceId(String id) {
         deviceId.setText(id);
     }
 
     // 设置工作区域
+    /**
+     * 设置工作区域
+     *
+     * @param area 工作区域名称
+     */
     public void setWorkArea(String area) {
         workArea.setText(area);
     }
 
     // 设置工作状态
+    /**
+     * 设置工作状态
+     *
+     * @param status 工作状态描述
+     */
     public void setWorkStatus(String status) {
         workStatus.setText(status);
     }
 
     // 设置电池图标
+    /**
+     * 设置电池图标
+     *
+     * @param drawable 电池图标Drawable对象
+     */
     public void setBatteryIcon(Drawable drawable) {
         batteryIcon.setImageDrawable(drawable);
     }
 
+    /**
+     * 设置电池图标资源
+     *
+     * @param resId 电池图标资源ID
+     */
     public void setBatteryIcon(@DrawableRes int resId) {
         batteryIcon.setImageResource(resId);
     }
 
-        // 新增方法：根据电量百分比设置电池图标
+        /**
+     * 根据电量百分比设置电池图标
+     * 根据不同的电量级别显示对应的电池图标，电量级别分为10个等级
+     *
+     * @param level 电量百分比，范围0-100
+     * @throws IllegalArgumentException 当电量百分比不在0-100范围内时抛出
+     * @throws IllegalStateException 当batteryIcon未初始化时抛出
+     */
     public void setBatteryLevel(int level) {
         // 参数校验：电量百分比必须在 0 到 100 之间
         if (level < 0 || level > 100) {
@@ -225,6 +286,12 @@ public class DeviceInfoCard extends FrameLayout {
         batteryIcon.setImageResource(resources[resources.length - 1]);
     }
 
+    /**
+     * 设置电池充电状态
+     * 根据充电状态设置电池状态文本和颜色
+     *
+     * @param isCharging true表示正在充电，false表示放电中
+     */
     public void setBatteryStatus(boolean isCharging) {
         if (isCharging) {
             batteryStatus.setText("充电中");
@@ -235,15 +302,28 @@ public class DeviceInfoCard extends FrameLayout {
         }
     }
 
-    // 设置按钮文本
+    /**
+     * 设置操作按钮文本
+     *
+     * @param text 按钮显示文本
+     */
     public void setButtonText(String text) {
         actionButton.setText(text);
     }
+    /**
+     * 设置设备类型
+     *
+     * @param type 设备类型描述
+     */
     public void setDeviceType(String type) {
         deviceType.setText(type);
     }
 
-    // 设置按钮点击监听器
+    /**
+     * 设置操作按钮点击监听器
+     *
+     * @param listener 按钮点击事件监听器
+     */
     public void setActionButtonClickListener(OnClickListener listener) {
         actionButton.setOnClickListener(listener);
     }

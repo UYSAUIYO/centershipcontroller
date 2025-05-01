@@ -1,6 +1,5 @@
 package com.yuwen.centershipcontroller.Utils;
 
-
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
@@ -10,8 +9,6 @@ import androidx.annotation.NonNull;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonSyntaxException;
-
-
 
 import java.util.concurrent.TimeUnit;
 
@@ -33,6 +30,7 @@ public class WebSocketManager {
     private WebSocket webSocket;
     private final OkHttpClient client;
     private ConnectionCallback connectionCallback;
+    private MessageListener messageListener;
 
     private static final class InstanceHolder {
         static final WebSocketManager INSTANCE = new WebSocketManager();
@@ -52,33 +50,53 @@ public class WebSocketManager {
     }
 
     /**
-     * 连接到WebSocket服务器
-     * @param url WebSocket连接URL
-     * @param callback 连接回调
+     * 设置连接回调
+     * @param callback 连接回调接口
      */
-    public void connect(String url, ConnectionCallback callback) {
-        if (url == null || url.isEmpty()) {
-            if (callback != null) {
-                callback.onFailure("无效的连接地址");
-            }
-            return;
+    public void setConnectionCallback(ConnectionCallback callback) {
+        this.connectionCallback = callback;
+    }
+
+    /**
+     * 设置消息监听器
+     * @param listener 消息监听器接口
+     */
+    public void setMessageListener(MessageListener listener) {
+        this.messageListener = listener;
+    }
+
+    /**
+     * 发送WebSocket消息
+     * @param message 要发送的消息
+     * @return 是否发送成功
+     */
+    public boolean sendMessage(String message) {
+        if (webSocket != null) {
+            return webSocket.send(message);
+        } else {
+            Log.e(TAG, "WebSocket未连接，无法发送消息");
+            return false;
+        }
+    }
+
+    public void connect(String serverUrl) {
+        // Check if URL already has a scheme
+        if (!serverUrl.startsWith("ws://") && !serverUrl.startsWith("wss://")) {
+            // Add WebSocket scheme
+            serverUrl = "ws://" + serverUrl;
         }
 
-        // 设置回调
-        this.connectionCallback = callback;
+        Log.d(TAG, "Connecting to WebSocket with URL: " + serverUrl);
 
-        // 断开之前的连接
-        disconnect();
-
-        // 创建WebSocket请求
+        // Create request with properly formatted URL
         Request request = new Request.Builder()
-                .url(url)
+                .url(serverUrl)
                 .build();
 
         // 连接WebSocket
         webSocket = client.newWebSocket(request, new WebSocketHandler());
 
-        Log.d(TAG, "正在连接WebSocket: " + url);
+        Log.d(TAG, "正在连接WebSocket: " + serverUrl);
     }
 
     /**
@@ -98,11 +116,22 @@ public class WebSocketManager {
         @Override
         public void onOpen(@NonNull WebSocket webSocket, @NonNull Response response) {
             Log.d(TAG, "WebSocket连接已打开");
+            // 连接成功，通知回调
+            if (connectionCallback != null) {
+                new Handler(Looper.getMainLooper()).post(() ->
+                        connectionCallback.onConnected("连接成功"));
+            }
         }
 
         @Override
         public void onMessage(@NonNull WebSocket webSocket, @NonNull String text) {
             Log.d(TAG, "收到消息: " + text);
+
+            // 将消息转发给消息监听器
+            if (messageListener != null) {
+                messageListener.onMessage(text);
+            }
+
             try {
                 // 解析JSON消息
                 JsonObject jsonObject = JsonParser.parseString(text).getAsJsonObject();
@@ -118,7 +147,7 @@ public class WebSocketManager {
                     }
                 }
 
-                // 这里可以添加其他消息类型的处理
+                // 其他消息类型的处理已移至MainDeviceSocket类中
 
             } catch (JsonSyntaxException e) {
                 Log.e(TAG, "JSON解析错误: " + e.getMessage());
@@ -168,5 +197,16 @@ public class WebSocketManager {
          * @param errorMessage 错误信息
          */
         void onFailure(String errorMessage);
+    }
+
+    /**
+     * WebSocket消息监听器接口
+     */
+    public interface MessageListener {
+        /**
+         * 收到消息回调
+         * @param text 消息内容
+         */
+        void onMessage(String text);
     }
 }

@@ -6,6 +6,8 @@ import android.util.Log;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonSyntaxException;
+import com.yuwen.centershipcontroller.Socket.MainDeviceSocket;
+import com.yuwen.centershipcontroller.Views.DeviceInfoCard;
 
 /**
  * 二维码扫描结果处理工具类
@@ -14,11 +16,21 @@ import com.google.gson.JsonSyntaxException;
 public class QRCodeResultHandler {
     private static final String TAG = "QRCodeResultHandler";
     private static final String CONNECT_URL_KEY = "connect_url";
-
     private final QRResultCallback callback;
+    private final Context context;
+    private DeviceInfoCard deviceInfoCard;
 
     public QRCodeResultHandler(Context context, QRResultCallback callback) {
+        this.context = context;
         this.callback = callback;
+    }
+
+    /**
+     * 设置设备信息卡片
+     * @param deviceInfoCard 设备信息卡片
+     */
+    public void setDeviceInfoCard(DeviceInfoCard deviceInfoCard) {
+        this.deviceInfoCard = deviceInfoCard;
     }
 
     /**
@@ -27,29 +39,25 @@ public class QRCodeResultHandler {
      */
     public void processResult(String result) {
         Log.d(TAG, "处理扫描结果: " + result);
-
         if (result == null || result.isEmpty()) {
             notifyError();
             return;
         }
-
         // 尝试解析为JSON
         try {
             JsonObject jsonObject = JsonParser.parseString(result).getAsJsonObject();
-
             // 检查是否包含connect_url字段
             if (jsonObject.has(CONNECT_URL_KEY)) {
                 String wsUrl = jsonObject.get(CONNECT_URL_KEY).getAsString();
+                Log.d(TAG, "WebSocket URL: " + wsUrl);
                 if (wsUrl != null && !wsUrl.isEmpty()) {
                     // 连接WebSocket
                     connectWebSocket(wsUrl);
                     return;
                 }
             }
-
             // JSON格式但没有connect_url字段
             notifyResult(result);
-
         } catch (JsonSyntaxException e) {
             // 不是JSON格式，直接返回结果
             notifyResult(result);
@@ -61,29 +69,46 @@ public class QRCodeResultHandler {
      * @param url WebSocket URL
      */
     private void connectWebSocket(String url) {
+        // Make sure URL has proper WebSocket scheme
+        if (!url.startsWith("ws://") && !url.startsWith("wss://")) {
+            url = "ws://" + url;
+        }
         Log.d(TAG, "正在连接WebSocket: " + url);
 
-        if (callback != null) {
-            callback.onProcessing("正在连接服务器...");
-        }
+        // 获取WebSocketManager实例
+        WebSocketManager webSocketManager = WebSocketManager.getInstance();
 
-        WebSocketManager.getInstance().connect(url, new WebSocketManager.ConnectionCallback() {
+        // 设置连接回调
+        webSocketManager.setConnectionCallback(new WebSocketManager.ConnectionCallback() {
             @Override
             public void onConnected(String message) {
-                Log.d(TAG, "WebSocket连接成功: " + message);
                 if (callback != null) {
                     callback.onConnectionSuccess(message);
+                }
+
+                // 连接成功后初始化并启动MainDeviceSocket
+                if (deviceInfoCard != null) {
+                    MainDeviceSocket mainDeviceSocket = MainDeviceSocket.getInstance();
+                    mainDeviceSocket.init(context, deviceInfoCard);
+                    mainDeviceSocket.start();
                 }
             }
 
             @Override
             public void onFailure(String errorMessage) {
-                Log.e(TAG, "WebSocket连接失败: " + errorMessage);
                 if (callback != null) {
                     callback.onConnectionFailure(errorMessage);
                 }
             }
         });
+
+        // 通知正在处理
+        if (callback != null) {
+            callback.onProcessing("正在连接到服务器...");
+        }
+
+        // 连接WebSocket
+        webSocketManager.connect(url);
     }
 
     /**
@@ -134,4 +159,3 @@ public class QRCodeResultHandler {
         void onError(String error);
     }
 }
-

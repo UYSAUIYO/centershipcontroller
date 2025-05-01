@@ -27,6 +27,7 @@ import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
+import android.view.Window;
 import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -37,6 +38,9 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 
 import com.google.zxing.BarcodeFormat;
 import com.google.zxing.BinaryBitmap;
@@ -48,6 +52,7 @@ import com.google.zxing.Result;
 import com.google.zxing.common.HybridBinarizer;
 import com.yuwen.centershipcontroller.Component.CustomDialog;
 import com.yuwen.centershipcontroller.R;
+import com.yuwen.centershipcontroller.Utils.QRCodeProcessor;
 import com.yuwen.centershipcontroller.Utils.QRCodeResultHandler;
 import com.yuwen.centershipcontroller.Utils.WebSocketManager;
 
@@ -55,7 +60,6 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumMap;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Semaphore;
@@ -85,6 +89,8 @@ public class QR_codeScanner extends AppCompatActivity {
     // UI组件
     private SurfaceView cameraPreview;
     private QRCodeScannerView scannerView;
+    private CustomDialog processingDialog; // 声明用于保存处理中的对话框实例
+    private CustomDialog statusDialog; // 单一对话框引用
     private Button flashButton;
     private Button scanButton;
     private Button exitButton;
@@ -99,6 +105,19 @@ public class QR_codeScanner extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // 隐藏状态栏
+        Window window = getWindow();
+        WindowInsetsControllerCompat windowInsetsController =
+                WindowCompat.getInsetsController(window, window.getDecorView());
+        // 隐藏状态栏
+        windowInsetsController.hide(WindowInsetsCompat.Type.statusBars());
+        // 设置系统栏行为
+        windowInsetsController.setSystemBarsBehavior(
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        );
+        // 确保内容显示在全屏模式下
+        WindowCompat.setDecorFitsSystemWindows(window, false);
+
         setContentView(R.layout.activity_qr_code_scanner);
 
         // 初始化UI组件
@@ -480,40 +499,22 @@ public class QR_codeScanner extends AppCompatActivity {
      * 解码位图中的二维码
      */
     private void decodeBitmap(Bitmap bitmap) {
-        try {
-            int width = bitmap.getWidth();
-            int height = bitmap.getHeight();
-            int[] pixels = new int[width * height];
-            bitmap.getPixels(pixels, 0, width, 0, 0, width, height);
-
-            com.google.zxing.RGBLuminanceSource source = new com.google.zxing.RGBLuminanceSource(width, height, pixels);
-            BinaryBitmap binaryBitmap = new BinaryBitmap(new HybridBinarizer(source));
-
-            Map<DecodeHintType, Object> hints = new HashMap<>();
-
-            // 使用集合存储支持的格式
-            List<BarcodeFormat> formats = new ArrayList<>();
-            formats.add(BarcodeFormat.QR_CODE);
-            // 也可以添加其他格式支持
-            formats.add(BarcodeFormat.DATA_MATRIX);
-            formats.add(BarcodeFormat.CODE_128);
-
-            hints.put(DecodeHintType.POSSIBLE_FORMATS, formats);
-            hints.put(DecodeHintType.TRY_HARDER, Boolean.TRUE);
-
-            MultiFormatReader reader = new MultiFormatReader();
-            reader.setHints(hints);
-
-            try {
-                Result result = reader.decode(binaryBitmap);
+        QRCodeProcessor qrProcessor  = new QRCodeProcessor();
+        qrProcessor.decodeBitmap(bitmap, new QRCodeProcessor.DecodeCallback() {
+            @Override
+            public void onDecodeSuccess(Result result) {
                 handleScanResult(result.getText());
-            } catch (NotFoundException e) {
-                Toast.makeText(this, "未找到二维码", Toast.LENGTH_SHORT).show();
             }
-        } catch (Exception e) {
-            Log.e(TAG, "解码位图失败", e);
-            Toast.makeText(this, "图片解析失败", Toast.LENGTH_SHORT).show();
-        }
+
+            @Override
+            public void onDecodeFailed() {
+                runOnUiThread(() -> {
+                    if (!isFinishing()) {
+                        Toast.makeText(QR_codeScanner.this, "未找到二维码", Toast.LENGTH_SHORT).show();
+                    }
+                });
+            }
+        });
     }
 
 
@@ -617,42 +618,76 @@ public class QR_codeScanner extends AppCompatActivity {
             public void onProcessing(String message) {
                 // 正在处理连接
                 runOnUiThread(() -> {
-                    scanResultText.setText(message);
+                    // 在显示对话框前，检查Activity是否已结束
+                    if (!isFinishing() && !isDestroyed()) {
+                        try {
+                            processingDialog = new CustomDialog(QR_codeScanner.this);
+                            processingDialog.setTitle("连接中");
+                            processingDialog.setMessage(message);
+                            processingDialog.showLoadingIcon();
+                            processingDialog.hideNegativeButton();
+                            processingDialog.setPositiveButton("取消", v -> {
+                                processingDialog.dismiss();
+                                // 取消连接
+                                WebSocketManager.getInstance().disconnect();
+                                // 返回
+                                finish();
+                            });
+                            processingDialog.setCancelable(false);
+                            processingDialog.show();
 
-                    // 显示连接中对话框
-                    CustomDialog dialog = new CustomDialog(QR_codeScanner.this);
-                    dialog.setTitle("连接");
-                    dialog.setMessage("正在连接到远程服务器...");
-                    dialog.showLoadingIcon();
-                    dialog.hideNegativeButton();
-                    dialog.setPositiveButton("取消", v -> {
-                        WebSocketManager.getInstance().disconnect();
-                        dialog.dismiss();
-                        processingBarcode = false;
-                    });
-                    dialog.setCancelable(false);
-                    dialog.show();
+                            // 保存对话框引用以便后续关闭
+                        } catch (Exception e) {
+                            // 忽略异常
+                        }
+                    }
                 });
             }
+
 
             @Override
             public void onConnectionSuccess(String message) {
                 // WebSocket连接成功
                 runOnUiThread(() -> {
-                    // 显示成功对话框
-                    CustomDialog dialog = new CustomDialog(QR_codeScanner.this);
-                    dialog.setTitle("连接成功");
-                    dialog.setMessage("已成功连接到远程服务器");
-                    dialog.showSuccessIcon();
-                    dialog.hideNegativeButton();
-                    dialog.setPositiveButton("确定", v -> {
-                        dialog.dismiss();
-                        // 返回主页面
+                    // 在显示对话框前，检查Activity是否已结束
+                    if (!isFinishing() && !isDestroyed()) {
+                        // 显示成功对话框
+                        CustomDialog dialog = new CustomDialog(QR_codeScanner.this);
+                        dialog.setTitle("连接成功");
+                        dialog.setMessage("已成功连接到远程服务器");
+                        dialog.showSuccessIcon();
+                        dialog.hideNegativeButton();
+                        dialog.setPositiveButton("确定", v -> {
+                            try {
+                                if (dialog.isShowing()) {
+                                    dialog.dismiss();
+                                }
+                                // 返回主页面并设置结果为成功
+                                setResult(RESULT_OK);
+                                finish();
+                            } catch (Exception e) {
+                                // 忽略可能的异常
+                                setResult(RESULT_OK);
+                                finish();
+                            }
+                        });
+
+                        // 安全地设置自动关闭，3秒后自动关闭对话框并返回
+                        dialog.autoDismiss(2000);
+                        dialog.setCancelable(false);
+
+                        try {
+                            dialog.show();
+                        } catch (Exception e) {
+                            // 如果无法显示对话框，直接设置结果并返回
+                            setResult(RESULT_OK);
+                            finish();
+                        }
+                    } else {
+                        // Activity已经结束，只需设置结果
+                        setResult(RESULT_OK);
                         finish();
-                    });
-                    dialog.autoDismiss(3000);// 3秒后自动关闭
-                    dialog.setCancelable(false);
-                    dialog.show();
+                    }
                 });
             }
 
@@ -763,6 +798,26 @@ public class QR_codeScanner extends AppCompatActivity {
         stopBackgroundThread();
         super.onPause();
     }
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+
+        // 安全关闭所有对话框
+        if (processingDialog != null && processingDialog.isShowing()) {
+            try {
+                processingDialog.dismiss();
+            } catch (Exception e) {
+                // 忽略异常
+            }
+        }
+
+        // 停止相机和释放资源
+        closeCamera();
+        stopBackgroundThread();
+        Log.d(TAG, "相机资源已释放");
+        Log.d(TAG, "后台处理线程已停止");
+    }
+
 
     /**
      * 启动后台线程

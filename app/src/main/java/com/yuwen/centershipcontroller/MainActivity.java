@@ -8,10 +8,12 @@ import android.util.Log;
 import android.view.View;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -29,6 +31,8 @@ import com.amap.api.maps.model.LatLng;
 import com.amap.api.maps.model.MyLocationStyle;
 import com.amap.api.services.core.ServiceSettings;
 import com.yuwen.centershipcontroller.Activity.SettingsActivity;
+import com.yuwen.centershipcontroller.Component.CustomDialog;
+import com.yuwen.centershipcontroller.Socket.MainDeviceSocket;
 import com.yuwen.centershipcontroller.Utils.UserSettings;
 import com.yuwen.centershipcontroller.Utils.Utils;
 import com.yuwen.centershipcontroller.Views.DeviceInfoCard;
@@ -42,13 +46,17 @@ import pub.devrel.easypermissions.EasyPermissions;
  * @author Yuwen
  */
 public class MainActivity extends AppCompatActivity implements LocationSource, AMapLocationListener {
+    private static final String TAG = "MainActivity";
     //请求权限码
     private static final int REQUEST_PERMISSIONS = 9527;
     private static final int REQUEST_CAMERA_PERMISSION = 9528; // 新增摄像头权限请求码
+    private static final int REQUEST_QR_SCAN = 9529; // WebSocket连接请求码
+
     private MapView mMapView;//声明一个地图视图对象
     private AMap aMap;
 
     private DeviceInfoCard deviceInfoCard;
+    private ImageView connectionStatusLight; // 连接状态指示灯
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -139,10 +147,53 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
         if (userSettings.checkFirstRun()) {
             showUserAgreementDialog();
         }
+
+        // 初始化设备信息卡
         deviceInfoCard = findViewById(R.id.device_card);
-        deviceInfoCard.setDeviceTitle("人工湖001"); // 确保传入的字符串是有效的 BufferType 枚举值
-        deviceInfoCard.setBatteryLevel(50);
-        deviceInfoCard.setBatteryStatus(false);
+        initDeviceInfoCard();
+
+        // 初始化连接状态指示灯
+        connectionStatusLight = findViewById(R.id.status_light);
+        updateConnectionStatusLight(false); // 默认为未连接状态
+
+        // 设置MainDeviceSocket连接状态监听
+        MainDeviceSocket.getInstance().setConnectionStatusListener(
+                this::updateConnectionStatusLight
+        );
+    }
+
+    /**
+     * 更新连接状态指示灯
+     * @param isConnected 是否已连接
+     */
+    private void updateConnectionStatusLight(boolean isConnected) {
+        if (connectionStatusLight != null) {
+            connectionStatusLight.setImageResource(
+                    isConnected ? R.drawable.green : R.drawable.red
+            );
+        }
+    }
+
+    /**
+     * 初始化设备信息卡
+     */
+    private void initDeviceInfoCard() {
+        if (deviceInfoCard != null) {
+            deviceInfoCard.setDeviceTitle("主控设备");
+            deviceInfoCard.setDeviceType("管理端");
+            deviceInfoCard.setDeviceId("未连接");
+            deviceInfoCard.setWorkStatus("未连接");
+            deviceInfoCard.setWorkArea("未分配");
+            deviceInfoCard.setBatteryLevel(100);
+            deviceInfoCard.setBatteryStatus(true);
+
+            // 设置卡片操作按钮
+            deviceInfoCard.setButtonText("连接设备");
+            deviceInfoCard.setActionButtonClickListener(v -> {
+                // 启动二维码扫描
+                onScannerClick(v);
+            });
+        }
     }
 
     /**
@@ -197,23 +248,25 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
         if (EasyPermissions.hasPermissions(this, perms)) {
             // 权限已授予，可执行相关操作
             Toast.makeText(this, "相机权限已就绪", Toast.LENGTH_SHORT).show();
-            // 调用摄像头功能...
+            // 调用摄像头功能
+            Intent intent = new Intent(this, QR_codeScanner.class);
+            startActivityForResult(intent, REQUEST_QR_SCAN);
         } else {
             EasyPermissions.requestPermissions(this, "需要访问相机和媒体文件", REQUEST_CAMERA_PERMISSION, perms);
         }
     }
 
     /**
-     * 示例：在设置菜单点击时请求权限
+     * 设置菜单点击事件
      */
     public void onSettingClick(View view) {
         Intent intent = new Intent(this, SettingsActivity.class);
         startActivity(intent);
-        
-        // 示例触发权限请求（实际应根据业务场景调用）
-        requestCameraPermission(); 
     }
 
+    /**
+     * 显示用户协议对话框
+     */
     private void showUserAgreementDialog() {
         new AlertDialog.Builder(this)
                 .setTitle("用户协议")
@@ -240,8 +293,9 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
                 .show();
     }
 
-    // 如果需要将控制值传递到其他组件，可以添加这样的方法
-
+    /**
+     * 更新控制值显示
+     */
     private void updateControlValues(int length, int angle) {
         TextView lengthText = findViewById(R.id.textView);
         TextView angleText = findViewById(R.id.textView2);
@@ -256,10 +310,38 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
     }
 
     /**
+     * 处理二维码扫描结果
+     */
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_QR_SCAN && resultCode == RESULT_OK) {
+            // 扫描成功，连接已建立
+            // 初始化MainDeviceSocket并传递deviceInfoCard
+            MainDeviceSocket mainDeviceSocket = MainDeviceSocket.getInstance();
+            mainDeviceSocket.init(this, deviceInfoCard);
+            mainDeviceSocket.start();
+
+            // 显示连接状态
+            showConnectionSuccessDialog();
+        }
+    }
+
+    /**
+     * 显示连接成功的对话框
+     */
+    private void showConnectionSuccessDialog() {
+        CustomDialog dialog = new CustomDialog(this);
+        dialog.setTitle("连接状态");
+        dialog.setMessage("正在连接到船舶设备...");
+        dialog.showLoadingIcon();
+        dialog.hideNegativeButton();
+        dialog.setPositiveButton("确定", v -> dialog.dismiss());
+        dialog.show();
+    }
+
+    /**
      * 请求权限结果
-     * @param requestCode
-     * @param permissions
-     * @param grantResults
      */
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
@@ -267,7 +349,6 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
         //设置权限请求结果
         EasyPermissions.onRequestPermissionsResult(requestCode, permissions, grantResults, this);
     }
-
 
     /**
      * 动态请求权限
@@ -321,7 +402,6 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
         }
     }
 
-
     /**
      * 停止定位
      */
@@ -337,9 +417,9 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
 
     private boolean isFirstLoc = true;//判断是否第一次定位
     private LatLng currentLatLng;//当前定位
+
     /**
      * 监听定位回调
-     * @param aMapLocation
      */
     @Override
     public void onLocationChanged(AMapLocation aMapLocation) {
@@ -377,47 +457,63 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
         }
     }
 
-
     /**
      * 生命周期-onDestroy
      */
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        mMapView.onDestroy(); // 确保调用 onDestroy 方法
+        // 断开WebSocket连接
+        MainDeviceSocket.getInstance().disconnect();
+
+        if (mMapView != null) {
+            mMapView.onDestroy(); // 确保调用 onDestroy 方法
+        }
         Log.d("MapLifecycle", "MapView onDestroy called.");
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        mMapView.onResume(); // 确保调用 onResume 方法
+        if (mMapView != null) {
+            mMapView.onResume(); // 确保调用 onResume 方法
+        }
         Log.d("MapLifecycle", "MapView onResume called.");
+
+        // 检查WebSocket连接状态并更新指示灯
+        boolean isConnected = MainDeviceSocket.getInstance().isConnected();
+        updateConnectionStatusLight(isConnected);
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-        mMapView.onPause(); // 确保调用 onPause 方法
+        if (mMapView != null) {
+            mMapView.onPause(); // 确保调用 onPause 方法
+        }
         Log.d("MapLifecycle", "MapView onPause called.");
     }
 
     @Override
     protected void onSaveInstanceState(@NonNull Bundle outState) {
         super.onSaveInstanceState(outState);
-        mMapView.onSaveInstanceState(outState);//保存地图当前的状态
+        if (mMapView != null) {
+            mMapView.onSaveInstanceState(outState);//保存地图当前的状态
+        }
         Log.d("MapLifecycle", "MapView onSaveInstanceState called.");
     }
 
+    /**
+     * 扫描二维码按钮点击事件
+     */
     public void onScannerClick(View view) {
-    if (EasyPermissions.hasPermissions(this, Manifest.permission.CAMERA)) {
-        // 摄像头权限已授予，可以启动扫描器
-        Intent intent = new Intent(this, QR_codeScanner.class);
-        startActivity(intent);
-    } else {
-        // 请求摄像头权限
-        requestCameraPermission();
+        if (EasyPermissions.hasPermissions(this, Manifest.permission.CAMERA)) {
+            // 摄像头权限已授予，可以启动扫描器
+            Intent intent = new Intent(this, QR_codeScanner.class);
+            startActivityForResult(intent, REQUEST_QR_SCAN);
+        } else {
+            // 请求摄像头权限
+            requestCameraPermission();
+        }
     }
-}
-
 }
