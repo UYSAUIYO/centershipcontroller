@@ -12,6 +12,8 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
@@ -31,7 +33,6 @@ import com.amap.api.maps.model.LatLng;
 import com.amap.api.maps.model.MyLocationStyle;
 import com.amap.api.services.core.ServiceSettings;
 import com.yuwen.centershipcontroller.Activity.SettingsActivity;
-import com.yuwen.centershipcontroller.Component.CustomDialog;
 import com.yuwen.centershipcontroller.Socket.MainDeviceSocket;
 import com.yuwen.centershipcontroller.Utils.UserSettings;
 import com.yuwen.centershipcontroller.Utils.Utils;
@@ -52,11 +53,12 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
     private static final int REQUEST_CAMERA_PERMISSION = 9528; // 新增摄像头权限请求码
     private static final int REQUEST_QR_SCAN = 9529; // WebSocket连接请求码
 
+    private ActivityResultLauncher<Intent> qrCodeScannerLauncher;
+
     private MapView mMapView;//声明一个地图视图对象
     private AMap aMap;
 
     private DeviceInfoCard deviceInfoCard;
-    private ImageView connectionStatusLight; // 连接状态指示灯
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -153,25 +155,68 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
         initDeviceInfoCard();
 
         // 初始化连接状态指示灯
-        connectionStatusLight = findViewById(R.id.status_light);
+        // 连接状态指示灯
+        ImageView connectionStatusLight = findViewById(R.id.status_light);
         updateConnectionStatusLight(false); // 默认为未连接状态
 
         // 设置MainDeviceSocket连接状态监听
         MainDeviceSocket.getInstance().setConnectionStatusListener(
                 this::updateConnectionStatusLight
         );
+        // 注册二维码扫描结果回调
+        qrCodeScannerLauncher = registerForActivityResult(
+                new ActivityResultContracts.StartActivityForResult(),
+                result -> {
+                    Log.d(TAG, "扫码结果返回: " + result.getResultCode());
+                    if (result.getResultCode() == RESULT_OK && result.getData() != null) {
+                        // 处理扫码结果
+                        onQRScanResult(result.getData());
+                    }
+                }
+        );
+
     }
+    /**
+     * 处理二维码扫描结果
+     */
+    private void onQRScanResult(@Nullable Intent data) {
+        if (MainActivity.REQUEST_QR_SCAN == REQUEST_QR_SCAN && android.app.Activity.RESULT_OK == RESULT_OK) {
+            Log.d(TAG, "扫码成功，开始处理WebSocket连接");
+
+            // 立即更新UI以反馈连接状态
+            updateConnectionStatusLight(true);
+
+            // 初始化MainDeviceSocket并传递deviceInfoCard
+            MainDeviceSocket mainDeviceSocket = MainDeviceSocket.getInstance();
+
+            // 设置连接状态监听器
+            mainDeviceSocket.setConnectionStatusListener(isConnected -> {
+                Log.d(TAG, "WebSocket连接状态变化: " + (isConnected ? "已连接" : "未连接"));
+                updateConnectionStatusLight(isConnected);
+            });
+
+            mainDeviceSocket.init(this, deviceInfoCard);
+
+            // 启动WebSocket连接处理
+            mainDeviceSocket.start();
+        }
+    }
+
 
     /**
      * 更新连接状态指示灯
      * @param isConnected 是否已连接
      */
     private void updateConnectionStatusLight(boolean isConnected) {
-        if (connectionStatusLight != null) {
-            connectionStatusLight.setImageResource(
-                    isConnected ? R.drawable.green : R.drawable.red
-            );
-        }
+        runOnUiThread(() -> {
+            ImageView statusLight = findViewById(R.id.status_light);
+            if (statusLight != null) {
+                Log.d(TAG, "更新连接状态指示灯: " + (isConnected ? "已连接" : "未连接"));
+                statusLight.setImageResource(
+                        isConnected ? R.drawable.green : R.drawable.red
+                );
+            }
+        });
     }
 
     /**
@@ -189,16 +234,13 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
 
             // 设置卡片操作按钮
             deviceInfoCard.setButtonText("连接设备");
-            deviceInfoCard.setActionButtonClickListener(v -> {
-                // 启动二维码扫描
-                onScannerClick(v);
-            });
+            // 启动二维码扫描
+            deviceInfoCard.setActionButtonClickListener(this::onScannerClick);
         }
     }
 
     /**
      * 初始化地图
-     * @param savedInstanceState
      */
     private void initMap(Bundle savedInstanceState) {
         // 确保地图隐私合规接口已调用
@@ -250,7 +292,7 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
             Toast.makeText(this, "相机权限已就绪", Toast.LENGTH_SHORT).show();
             // 调用摄像头功能
             Intent intent = new Intent(this, QR_codeScanner.class);
-            startActivityForResult(intent, REQUEST_QR_SCAN);
+            qrCodeScannerLauncher.launch(intent);
         } else {
             EasyPermissions.requestPermissions(this, "需要访问相机和媒体文件", REQUEST_CAMERA_PERMISSION, perms);
         }
@@ -312,33 +354,35 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
     /**
      * 处理二维码扫描结果
      */
+    // 在MainActivity.java中添加或修改以下方法
+
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        Log.d(TAG, "onActivityResult: requestCode=" + requestCode + ", resultCode=" + resultCode);
+
         if (requestCode == REQUEST_QR_SCAN && resultCode == RESULT_OK) {
-            // 扫描成功，连接已建立
+            Log.d(TAG, "扫码成功，开始处理WebSocket连接");
+
+            // 立即更新UI以反馈连接状态
+            updateConnectionStatusLight(true);
+
             // 初始化MainDeviceSocket并传递deviceInfoCard
             MainDeviceSocket mainDeviceSocket = MainDeviceSocket.getInstance();
-            mainDeviceSocket.init(this, deviceInfoCard);
-            mainDeviceSocket.start();
 
-            // 显示连接状态
-            showConnectionSuccessDialog();
+            // 设置连接状态监听器
+            mainDeviceSocket.setConnectionStatusListener(isConnected -> {
+                Log.d(TAG, "WebSocket连接状态变化: " + (isConnected ? "已连接" : "未连接"));
+                updateConnectionStatusLight(isConnected);
+            });
+
+            mainDeviceSocket.init(this, deviceInfoCard);
+
+            // 启动WebSocket连接处理
+            mainDeviceSocket.start();
         }
     }
 
-    /**
-     * 显示连接成功的对话框
-     */
-    private void showConnectionSuccessDialog() {
-        CustomDialog dialog = new CustomDialog(this);
-        dialog.setTitle("连接状态");
-        dialog.setMessage("正在连接到船舶设备...");
-        dialog.showLoadingIcon();
-        dialog.hideNegativeButton();
-        dialog.setPositiveButton("确定", v -> dialog.dismiss());
-        dialog.show();
-    }
 
     /**
      * 请求权限结果
@@ -416,7 +460,6 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
     }
 
     private boolean isFirstLoc = true;//判断是否第一次定位
-    private LatLng currentLatLng;//当前定位
 
     /**
      * 监听定位回调
@@ -431,7 +474,8 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
                 String address = aMapLocation.getAddress(); // 获取地址信息
 
                 // 更新当前定位点
-                currentLatLng = new LatLng(latitude, longitude);
+                //当前定位
+                LatLng currentLatLng = new LatLng(latitude, longitude);
 
                 // 判断定位点是否在当前地图显示范围内
                 if (aMap != null && !aMap.getProjection().getVisibleRegion().latLngBounds.contains(currentLatLng)) {
@@ -479,11 +523,12 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
             mMapView.onResume(); // 确保调用 onResume 方法
         }
         Log.d("MapLifecycle", "MapView onResume called.");
-
         // 检查WebSocket连接状态并更新指示灯
         boolean isConnected = MainDeviceSocket.getInstance().isConnected();
+        Log.d(TAG, "页面恢复，WebSocket连接状态: " + (isConnected ? "已连接" : "未连接"));
         updateConnectionStatusLight(isConnected);
     }
+
 
     @Override
     protected void onPause() {
@@ -510,10 +555,11 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
         if (EasyPermissions.hasPermissions(this, Manifest.permission.CAMERA)) {
             // 摄像头权限已授予，可以启动扫描器
             Intent intent = new Intent(this, QR_codeScanner.class);
-            startActivityForResult(intent, REQUEST_QR_SCAN);
+            qrCodeScannerLauncher.launch(intent); // 使用新方式启动
         } else {
             // 请求摄像头权限
             requestCameraPermission();
         }
     }
+
 }

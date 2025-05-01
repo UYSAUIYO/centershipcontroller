@@ -559,6 +559,7 @@ public class QR_codeScanner extends AppCompatActivity {
     /**
      * 处理扫描结果
      */
+    // 修改扫描结果处理部分，确保扫描成功后自动返回
     private void handleScanResult(String result) {
         if (result == null || result.isEmpty()) {
             return;
@@ -621,6 +622,10 @@ public class QR_codeScanner extends AppCompatActivity {
                     // 在显示对话框前，检查Activity是否已结束
                     if (!isFinishing() && !isDestroyed()) {
                         try {
+                            if (processingDialog != null && processingDialog.isShowing()) {
+                                processingDialog.dismiss();
+                            }
+
                             processingDialog = new CustomDialog(QR_codeScanner.this);
                             processingDialog.setTitle("连接中");
                             processingDialog.setMessage(message);
@@ -635,56 +640,30 @@ public class QR_codeScanner extends AppCompatActivity {
                             });
                             processingDialog.setCancelable(false);
                             processingDialog.show();
-
-                            // 保存对话框引用以便后续关闭
                         } catch (Exception e) {
-                            // 忽略异常
+                            Log.e(TAG, "显示处理对话框出错", e);
                         }
                     }
                 });
             }
 
-
             @Override
             public void onConnectionSuccess(String message) {
-                // WebSocket连接成功
+                // WebSocket连接成功，直接返回主页面并设置结果
                 runOnUiThread(() -> {
-                    // 在显示对话框前，检查Activity是否已结束
-                    if (!isFinishing() && !isDestroyed()) {
-                        // 显示成功对话框
-                        CustomDialog dialog = new CustomDialog(QR_codeScanner.this);
-                        dialog.setTitle("连接成功");
-                        dialog.setMessage("已成功连接到远程服务器");
-                        dialog.showSuccessIcon();
-                        dialog.hideNegativeButton();
-                        dialog.setPositiveButton("确定", v -> {
-                            try {
-                                if (dialog.isShowing()) {
-                                    dialog.dismiss();
-                                }
-                                // 返回主页面并设置结果为成功
-                                setResult(RESULT_OK);
-                                finish();
-                            } catch (Exception e) {
-                                // 忽略可能的异常
-                                setResult(RESULT_OK);
-                                finish();
-                            }
-                        });
-
-                        // 安全地设置自动关闭，3秒后自动关闭对话框并返回
-                        dialog.autoDismiss(2000);
-                        dialog.setCancelable(false);
-
-                        try {
-                            dialog.show();
-                        } catch (Exception e) {
-                            // 如果无法显示对话框，直接设置结果并返回
-                            setResult(RESULT_OK);
-                            finish();
+                    try {
+                        // 关闭正在显示的对话框
+                        if (processingDialog != null && processingDialog.isShowing()) {
+                            processingDialog.dismiss();
                         }
-                    } else {
-                        // Activity已经结束，只需设置结果
+
+                        // 设置结果为成功并返回主页面，不再显示确认对话框
+                        Log.d(TAG, "WebSocket连接成功，返回主界面");
+                        setResult(RESULT_OK);
+                        finish();
+                    } catch (Exception e) {
+                        Log.e(TAG, "处理连接成功出错", e);
+                        // 确保无论如何都返回主界面
                         setResult(RESULT_OK);
                         finish();
                     }
@@ -696,17 +675,25 @@ public class QR_codeScanner extends AppCompatActivity {
                 // WebSocket连接失败
                 runOnUiThread(() -> {
                     // 显示失败对话框
-                    CustomDialog dialog = new CustomDialog(QR_codeScanner.this);
-                    dialog.setTitle("连接失败");
-                    dialog.setMessage("无法连接到服务器: " + error);
-                    dialog.showErrorIcon();
-                    dialog.hideNegativeButton();
-                    dialog.setPositiveButton("确定", v -> {
-                        dialog.dismiss();
-                        processingBarcode = false;
-                    });
-                    dialog.setCancelable(false);
-                    dialog.show();
+                    try {
+                        if (processingDialog != null && processingDialog.isShowing()) {
+                            processingDialog.dismiss();
+                        }
+
+                        CustomDialog dialog = new CustomDialog(QR_codeScanner.this);
+                        dialog.setTitle("连接失败");
+                        dialog.setMessage("无法连接到服务器: " + error);
+                        dialog.showErrorIcon();
+                        dialog.hideNegativeButton();
+                        dialog.setPositiveButton("确定", v -> {
+                            dialog.dismiss();
+                            processingBarcode = false;
+                        });
+                        dialog.setCancelable(false);
+                        dialog.show();
+                    } catch (Exception e) {
+                        Log.e(TAG, "显示连接失败对话框出错", e);
+                    }
                 });
             }
 
@@ -720,7 +707,7 @@ public class QR_codeScanner extends AppCompatActivity {
                     new Handler(Looper.getMainLooper()).postDelayed(() -> {
                         scanResultText.setVisibility(View.GONE);
                         processingBarcode = false;
-                    },2000);
+                    }, 2000);
                 });
             }
         });
@@ -728,6 +715,7 @@ public class QR_codeScanner extends AppCompatActivity {
         // 处理扫描结果
         resultHandler.processResult(result);
     }
+
 
     /**
      * 选择最优的预览尺寸

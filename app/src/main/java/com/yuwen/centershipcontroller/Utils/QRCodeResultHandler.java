@@ -3,6 +3,8 @@ package com.yuwen.centershipcontroller.Utils;
 import android.content.Context;
 import android.util.Log;
 
+import androidx.annotation.NonNull;
+
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonSyntaxException;
@@ -68,48 +70,53 @@ public class QRCodeResultHandler {
      * 连接WebSocket
      * @param url WebSocket URL
      */
+    // 修改WebSocket连接处理部分
     private void connectWebSocket(String url) {
-        // Make sure URL has proper WebSocket scheme
+        // 确保URL格式正确
         if (!url.startsWith("ws://") && !url.startsWith("wss://")) {
             url = "ws://" + url;
         }
         Log.d(TAG, "正在连接WebSocket: " + url);
-
         // 获取WebSocketManager实例
         WebSocketManager webSocketManager = WebSocketManager.getInstance();
 
+        // 如果已经连接到同一个URL，则直接触发成功回调
+        if (webSocketManager.isConnected() && url.equals(webSocketManager.getCurrentUrl())) {
+            Log.d(TAG, "WebSocket已连接到该URL，直接返回成功");
+            if (callback != null) {
+                callback.onConnectionSuccess("连接成功");
+            }
+            return;
+        }
         // 设置连接回调
         webSocketManager.setConnectionCallback(new WebSocketManager.ConnectionCallback() {
             @Override
             public void onConnected(String message) {
+                Log.d(TAG, "WebSocket连接成功，通知UI: " + message);
                 if (callback != null) {
                     callback.onConnectionSuccess(message);
                 }
-
-                // 连接成功后初始化并启动MainDeviceSocket
-                if (deviceInfoCard != null) {
-                    MainDeviceSocket mainDeviceSocket = MainDeviceSocket.getInstance();
-                    mainDeviceSocket.init(context, deviceInfoCard);
-                    mainDeviceSocket.start();
-                }
             }
-
             @Override
             public void onFailure(String errorMessage) {
+                Log.e(TAG, "WebSocket连接失败: " + errorMessage);
                 if (callback != null) {
                     callback.onConnectionFailure(errorMessage);
                 }
             }
         });
-
         // 通知正在处理
         if (callback != null) {
             callback.onProcessing("正在连接到服务器...");
         }
+        // 断开可能存在的连接
+        webSocketManager.disconnect();
 
         // 连接WebSocket
         webSocketManager.connect(url);
     }
+
+
 
     /**
      * 通知普通结果

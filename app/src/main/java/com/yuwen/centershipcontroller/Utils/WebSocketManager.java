@@ -79,25 +79,36 @@ public class WebSocketManager {
         }
     }
 
+    // 添加一个方法来获取当前连接状态
+    public boolean isConnected() {
+        return webSocket != null;
+    }
+
+    // 添加获取当前连接URL的方法
+    private String currentUrl = "";
+    public String getCurrentUrl() {
+        return currentUrl;
+    }
+
+    // 修改connect方法，保存URL
     public void connect(String serverUrl) {
-        // Check if URL already has a scheme
+        // 确保URL格式正确
         if (!serverUrl.startsWith("ws://") && !serverUrl.startsWith("wss://")) {
-            // Add WebSocket scheme
             serverUrl = "ws://" + serverUrl;
         }
 
-        Log.d(TAG, "Connecting to WebSocket with URL: " + serverUrl);
+        this.currentUrl = serverUrl;
+        Log.d(TAG, "开始连接WebSocket: " + serverUrl);
 
-        // Create request with properly formatted URL
+        // 创建请求
         Request request = new Request.Builder()
                 .url(serverUrl)
                 .build();
 
         // 连接WebSocket
         webSocket = client.newWebSocket(request, new WebSocketHandler());
-
-        Log.d(TAG, "正在连接WebSocket: " + serverUrl);
     }
+
 
     /**
      * 断开WebSocket连接
@@ -125,8 +136,7 @@ public class WebSocketManager {
 
         @Override
         public void onMessage(@NonNull WebSocket webSocket, @NonNull String text) {
-            Log.d(TAG, "收到消息: " + text);
-
+            Log.d(TAG, "收到WebSocket消息: " + text);
             // 将消息转发给消息监听器
             if (messageListener != null) {
                 messageListener.onMessage(text);
@@ -146,13 +156,11 @@ public class WebSocketManager {
                         }
                     }
                 }
-
-                // 其他消息类型的处理已移至MainDeviceSocket类中
-
-            } catch (JsonSyntaxException e) {
-                Log.e(TAG, "JSON解析错误: " + e.getMessage());
+            } catch (Exception e) {
+                Log.e(TAG, "解析WebSocket消息出错: " + e.getMessage());
             }
         }
+
 
         @Override
         public void onMessage(@NonNull WebSocket webSocket, @NonNull ByteString bytes) {
@@ -160,7 +168,7 @@ public class WebSocketManager {
         }
 
         @Override
-        public void onClosing(WebSocket webSocket, int code, @NonNull String reason) {
+        public void onClosing(@NonNull WebSocket webSocket, int code, @NonNull String reason) {
             Log.d(TAG, "WebSocket正在关闭: " + code + ", " + reason);
             webSocket.close(NORMAL_CLOSURE_STATUS, null);
         }

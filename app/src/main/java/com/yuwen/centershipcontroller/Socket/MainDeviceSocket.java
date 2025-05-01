@@ -41,6 +41,7 @@ public class MainDeviceSocket {
     private static final String IDENTITY = "MAIN_DEVICES"; // 本设备类型
     private ConnectionStatusListener connectionStatusListener;
     private boolean isConnected = false;
+    private CustomDialog statusDialog;
 
     // 船舶设备信息
     private final List<ShipDevice> shipDevices = new ArrayList<>();
@@ -112,6 +113,7 @@ public class MainDeviceSocket {
     public void init(Context context, DeviceInfoCard deviceInfoCard) {
         this.context = context;
         this.deviceInfoCard = deviceInfoCard;
+        Log.d(TAG, "初始化MainDeviceSocket，context: " + context + ", deviceInfoCard: " + deviceInfoCard);
     }
 
     /**
@@ -135,8 +137,17 @@ public class MainDeviceSocket {
     /**
      * 开始处理WebSocket连接和通信
      */
+    /**
+     * 开始处理WebSocket连接和通信
+     */
     public void start() {
+        Log.d(TAG, "启动WebSocket连接处理");
+
         socketThread.execute(() -> {
+            // 检查WebSocket是否已连接
+            boolean wasAlreadyConnected = webSocketManager.isConnected();
+            Log.d(TAG, "WebSocket连接状态检查: " + (wasAlreadyConnected ? "已连接" : "未连接"));
+
             // 添加WebSocket连接处理逻辑
             webSocketManager.setConnectionCallback(new WebSocketManager.ConnectionCallback() {
                 @Override
@@ -146,7 +157,8 @@ public class MainDeviceSocket {
                     isConnected = true;
                     notifyConnectionStatusChanged();
 
-                    // 连接成功后，发送设备身份信息
+                    // 连接成功后，立即发送设备身份信息
+                    Log.d(TAG, "连接成功，发送设备身份信息");
                     sendIdentityInfo();
                 }
 
@@ -160,16 +172,36 @@ public class MainDeviceSocket {
             });
 
             // 添加消息监听器
-            webSocketManager.setMessageListener(this::processMessage);
+            webSocketManager.setMessageListener(message -> {
+                Log.d(TAG, "收到WebSocket消息，准备处理: " + message);
+                processMessage(message);
+            });
+
+            // 如果WebSocket已经连接，则手动触发连接成功回调
+            if (wasAlreadyConnected) {
+                Log.d(TAG, "WebSocket已经连接，手动触发连接处理流程");
+                isConnected = true;
+                notifyConnectionStatusChanged();
+                // 发送设备身份信息
+                sendIdentityInfo();
+            }
         });
     }
+
 
     /**
      * 通知连接状态变化
      */
     private void notifyConnectionStatusChanged() {
         if (connectionStatusListener != null) {
-            mainHandler.post(() -> connectionStatusListener.onConnectionStatusChanged(isConnected));
+            mainHandler.post(() -> {
+                try {
+                    connectionStatusListener.onConnectionStatusChanged(isConnected);
+                    Log.d(TAG, "已通知连接状态变化: " + isConnected);
+                } catch (Exception e) {
+                    Log.e(TAG, "通知连接状态变化出错: " + e.getMessage());
+                }
+            });
         }
     }
 
@@ -177,23 +209,36 @@ public class MainDeviceSocket {
      * 处理收到的WebSocket消息
      */
     private void processMessage(String message) {
+        Log.d(TAG, "开始处理WebSocket消息: " + message);
         try {
             JsonObject jsonObject = JsonParser.parseString(message).getAsJsonObject();
+
+            // 处理连接成功消息
+            if (jsonObject.has("type") && "connection".equals(jsonObject.get("type").getAsString())) {
+                if (jsonObject.has("message") && "Connected successfully".equals(jsonObject.get("message").getAsString())) {
+                    Log.d(TAG, "检测到连接成功消息，发送设备身份信息");
+                    sendIdentityInfo();
+                    return;
+                }
+            }
 
             // 处理房间消息
             if (jsonObject.has("type") && "room".equals(jsonObject.get("type").getAsString())) {
                 handleRoomMessage(jsonObject);
+                return;
             }
 
             // 处理房间信息消息
-            else if (jsonObject.has("type") && "room_info".equals(jsonObject.get("type").getAsString())) {
+            if (jsonObject.has("type") && "room_info".equals(jsonObject.get("type").getAsString())) {
                 handleRoomInfoMessage(jsonObject);
+                return;
             }
 
-            // 可以添加其他消息类型的处理...
+            // 未知消息类型
+            Log.d(TAG, "收到未处理的消息类型: " + message);
 
         } catch (Exception e) {
-            Log.e(TAG, "处理消息出错: " + e.getMessage());
+            Log.e(TAG, "处理消息出错: " + e.getMessage(), e);
         }
     }
 
@@ -201,16 +246,18 @@ public class MainDeviceSocket {
      * 处理房间消息
      */
     private void handleRoomMessage(JsonObject jsonObject) {
+        Log.d(TAG, "处理房间消息: " + jsonObject);
         try {
             if (jsonObject.has("room_id")) {
                 roomId = jsonObject.get("room_id").getAsString();
                 Log.d(TAG, "收到房间ID: " + roomId);
 
-                // 收到房间ID后，查询房间信息
-                socketThread.execute(this::queryRoomInfo);
+                // 收到房间ID后，立即查询房间信息
+                Log.d(TAG, "开始查询房间信息");
+                queryRoomInfo();
             }
         } catch (Exception e) {
-            Log.e(TAG, "处理房间消息出错: " + e.getMessage());
+            Log.e(TAG, "处理房间消息出错: " + e.getMessage(), e);
         }
     }
 
@@ -218,9 +265,11 @@ public class MainDeviceSocket {
      * 处理房间信息消息
      */
     private void handleRoomInfoMessage(JsonObject jsonObject) {
+        Log.d(TAG, "处理房间信息消息: " + jsonObject);
         try {
             if (jsonObject.has("room_id")) {
                 roomId = jsonObject.get("room_id").getAsString();
+                Log.d(TAG, "设置房间ID: " + roomId);
 
                 // 清空之前的设备列表
                 shipDevices.clear();
@@ -228,6 +277,7 @@ public class MainDeviceSocket {
                 // 解析客户端列表
                 if (jsonObject.has("clients") && jsonObject.get("clients").isJsonArray()) {
                     JsonArray clientsArray = jsonObject.getAsJsonArray("clients");
+                    Log.d(TAG, "客户端数量: " + clientsArray.size());
 
                     for (JsonElement clientElement : clientsArray) {
                         JsonObject clientObject = clientElement.getAsJsonObject();
@@ -236,18 +286,33 @@ public class MainDeviceSocket {
                         String identity = clientObject.has("identity") ?
                                 clientObject.get("identity").getAsString() : "";
 
+                        Log.d(TAG, "检测到客户端: deviceId=" + deviceId + ", identity=" + identity);
+
                         // 添加到船舶设备列表
                         if ("SHIP_DEVICES".equals(identity)) {
                             shipDevices.add(new ShipDevice(deviceId, identity));
+                            Log.d(TAG, "添加船舶设备: " + deviceId);
                         }
                     }
 
                     // 在主线程更新UI并显示对话框
-                    mainHandler.post(this::showDeviceInfoDialog);
+                    mainHandler.post(() -> {
+                        try {
+                            // 1. 先更新设备信息卡
+                            updateDeviceInfoCard();
+
+                            // 2. 然后显示连接成功对话框
+                            showDeviceInfoDialog();
+
+                            Log.d(TAG, "已更新UI和显示对话框");
+                        } catch (Exception e) {
+                            Log.e(TAG, "更新UI过程中出错: " + e.getMessage(), e);
+                        }
+                    });
                 }
             }
         } catch (Exception e) {
-            Log.e(TAG, "处理房间信息消息出错: " + e.getMessage());
+            Log.e(TAG, "处理房间信息消息出错: " + e.getMessage(), e);
         }
     }
 
@@ -265,7 +330,7 @@ public class MainDeviceSocket {
 
             webSocketManager.sendMessage(message);
         } catch (JSONException e) {
-            Log.e(TAG, "构建身份信息JSON失败: " + e.getMessage());
+            Log.e(TAG, "构建身份信息JSON失败: " + e.getMessage(), e);
         }
     }
 
@@ -282,7 +347,22 @@ public class MainDeviceSocket {
 
             webSocketManager.sendMessage(message);
         } catch (JSONException e) {
-            Log.e(TAG, "构建查询JSON失败: " + e.getMessage());
+            Log.e(TAG, "构建查询JSON失败: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 关闭当前显示的对话框
+     */
+    private void dismissCurrentDialog() {
+        if (statusDialog != null && statusDialog.isShowing()) {
+            try {
+                statusDialog.dismiss();
+                statusDialog = null;
+                Log.d(TAG, "关闭当前对话框");
+            } catch (Exception e) {
+                Log.e(TAG, "关闭对话框出错: " + e.getMessage(), e);
+            }
         }
     }
 
@@ -305,75 +385,81 @@ public class MainDeviceSocket {
         }
 
         try {
-            // 创建对话框
-            CustomDialog dialog = getCustomDialog();
-            dialog.show();
+            // 先关闭任何已存在的对话框
+            dismissCurrentDialog();
+
+            // 创建新对话框
+            statusDialog = new CustomDialog(context);
+            statusDialog.setTitle("设备连接成功");
+
+            // 构建消息内容
+            StringBuilder messageBuilder = new StringBuilder();
+            messageBuilder.append("已成功连接到服务器\n");
+            messageBuilder.append("房间号: ").append(roomId).append("\n\n");
+
+            if (shipDevices.isEmpty()) {
+                messageBuilder.append("未检测到船舶设备");
+            } else {
+                messageBuilder.append("检测到以下船舶设备:\n");
+                for (ShipDevice device : shipDevices) {
+                    messageBuilder.append("设备ID: ").append(device.getDeviceId()).append("\n");
+                    messageBuilder.append("设备类型: ").append(device.getDeviceType()).append("\n");
+                }
+            }
+
+            statusDialog.setMessage(messageBuilder.toString());
+            statusDialog.showSuccessIcon();
+            statusDialog.hideNegativeButton();
+
+            // 点击确定关闭对话框
+            statusDialog.setPositiveButton("确定", v -> {
+                try {
+                    dismissCurrentDialog();
+                } catch (Exception e) {
+                    Log.e(TAG, "关闭对话框出错: " + e.getMessage(), e);
+                }
+            });
+
+            statusDialog.setCancelable(false);
+            statusDialog.show();
+
+            Log.d(TAG, "设备信息对话框已显示");
         } catch (Exception e) {
-            Log.e(TAG, "显示对话框出错: " + e.getMessage());
+            Log.e(TAG, "显示对话框出错: " + e.getMessage(), e);
         }
     }
-
-    @NonNull
-    private CustomDialog getCustomDialog() {
-        CustomDialog dialog = new CustomDialog(context);
-        dialog.setTitle("设备连接成功");
-
-        // 构建消息内容
-        StringBuilder messageBuilder = getStringBuilder();
-
-        dialog.setMessage(messageBuilder.toString());
-        dialog.showSuccessIcon();
-        dialog.hideNegativeButton();
-
-        // 点击确定关闭对话框
-        dialog.setPositiveButton("确定", v -> {
-            try {
-                dialog.dismiss();
-                updateDeviceInfoCard();
-            } catch (Exception e) {
-                Log.e(TAG, "关闭对话框出错: " + e.getMessage());
-            }
-        });
-
-        dialog.setCancelable(false);
-        return dialog;
-    }
-
-    @NonNull
-    private StringBuilder getStringBuilder() {
-        StringBuilder messageBuilder = new StringBuilder();
-        messageBuilder.append("已成功连接到服务器\n");
-        messageBuilder.append("房间号: ").append(roomId).append("\n\n");
-
-        if (shipDevices.isEmpty()) {
-            messageBuilder.append("未检测到船舶设备");
-        } else {
-            messageBuilder.append("检测到以下船舶设备:\n");
-            for (ShipDevice device : shipDevices) {
-                messageBuilder.append("设备ID: ").append(device.getDeviceId()).append("\n");
-                messageBuilder.append("设备类型: ").append(device.getDeviceType()).append("\n");
-            }
-        }
-        return messageBuilder;
-    }
-
 
     /**
      * 更新设备信息卡片
      */
     private void updateDeviceInfoCard() {
         if (deviceInfoCard != null) {
-            // 设置本设备ID
-            String displayDeviceId = roomId + "+" + DEVICE_ID;
-            deviceInfoCard.setDeviceId(displayDeviceId);
+            try {
+                // 设置本设备ID
+                String displayDeviceId = roomId + "+" + DEVICE_ID;
+                deviceInfoCard.setDeviceId(displayDeviceId);
 
-            // 如果有船舶设备，显示船舶设备的其他信息
-            if (!shipDevices.isEmpty()) {
-                ShipDevice shipDevice = shipDevices.get(0);
-                if ("SHIP_DEVICES".equals(shipDevice.getIdentity())) {
-                    deviceInfoCard.setDeviceType("CL-0089");
+                // 设置设备标题和工作状态
+                deviceInfoCard.setDeviceTitle("主控设备");
+                deviceInfoCard.setWorkStatus("已连接");
+
+                // 更新按钮文本
+                deviceInfoCard.setButtonText("已连接");
+
+                // 如果有船舶设备，显示船舶设备的其他信息
+                if (!shipDevices.isEmpty()) {
+                    ShipDevice shipDevice = shipDevices.get(0);
+                    if ("SHIP_DEVICES".equals(shipDevice.getIdentity())) {
+                        deviceInfoCard.setDeviceType("CL-0089");
+                    }
                 }
+
+                Log.d(TAG, "设备信息卡片已更新: ID=" + displayDeviceId);
+            } catch (Exception e) {
+                Log.e(TAG, "更新设备信息卡片出错: " + e.getMessage(), e);
             }
+        } else {
+            Log.e(TAG, "设备信息卡片为空，无法更新");
         }
     }
 
@@ -386,5 +472,7 @@ public class MainDeviceSocket {
         }
         isConnected = false;
         notifyConnectionStatusChanged();
+
+        Log.d(TAG, "WebSocket连接已断开");
     }
 }
