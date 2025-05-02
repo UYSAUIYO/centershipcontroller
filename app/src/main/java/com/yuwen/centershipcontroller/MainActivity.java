@@ -35,7 +35,7 @@ import com.yuwen.centershipcontroller.Component.CustomDialog;
 import com.yuwen.centershipcontroller.Socket.MainDeviceSocket;
 import com.yuwen.centershipcontroller.Utils.UserSettings;
 import com.yuwen.centershipcontroller.Utils.Utils;
-import com.yuwen.centershipcontroller.Views.DeviceInfoCard;
+import com.yuwen.centershipcontroller.Component.DeviceInfoCard;
 import com.yuwen.centershipcontroller.Views.JoystickView;
 import com.yuwen.centershipcontroller.Views.QR_codeScanner;
 

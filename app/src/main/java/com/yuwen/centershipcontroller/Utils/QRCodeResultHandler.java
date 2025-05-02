@@ -3,13 +3,10 @@ package com.yuwen.centershipcontroller.Utils;
 import android.content.Context;
 import android.util.Log;
 
-import androidx.annotation.NonNull;
-
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonSyntaxException;
-import com.yuwen.centershipcontroller.Socket.MainDeviceSocket;
-import com.yuwen.centershipcontroller.Views.DeviceInfoCard;
+import com.yuwen.centershipcontroller.Component.DeviceInfoCard;
 
 /**
  * 二维码扫描结果处理工具类

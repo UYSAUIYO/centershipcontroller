@@ -1,4 +1,4 @@
-package com.yuwen.centershipcontroller.Views;
+package com.yuwen.centershipcontroller.Component;
 
 import android.content.Context;
 import android.content.res.TypedArray;
