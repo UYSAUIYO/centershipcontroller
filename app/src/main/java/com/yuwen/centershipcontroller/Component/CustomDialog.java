@@ -5,8 +5,11 @@ import android.app.Dialog;
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.DisplayMetrics;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.view.Window;
+import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.TextView;
@@ -37,6 +40,16 @@ public class CustomDialog extends Dialog {
         // 使用自定义布局
         View view = LayoutInflater.from(getContext()).inflate(R.layout.dialog_custom, null);
         setContentView(view);
+
+        // 设置默认宽度为屏幕的 80%
+        Window window = getWindow();
+        if (window != null) {
+            WindowManager.LayoutParams params = window.getAttributes();
+            DisplayMetrics displayMetrics = context.getResources().getDisplayMetrics();
+            // 80% 屏幕宽度
+            params.width = (int) (displayMetrics.widthPixels * 0.5f);
+            window.setAttributes(params);
+        }
 
         // 获取视图引用
         titleTextView = view.findViewById(R.id.dialog_title);

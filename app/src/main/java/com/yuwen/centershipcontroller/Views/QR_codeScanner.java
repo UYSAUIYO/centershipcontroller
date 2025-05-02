@@ -381,9 +381,7 @@ public class QR_codeScanner extends AppCompatActivity {
             return;
         }
 
-        Image image = null;
-        try {
-            image = reader.acquireLatestImage();
+        try (Image image = reader.acquireLatestImage()) {
             if (image == null) {
                 return;
             }
@@ -406,9 +404,6 @@ public class QR_codeScanner extends AppCompatActivity {
         } catch (Exception e) {
             Log.e(TAG, "处理相机图像出错", e);
         } finally {
-            if (image != null) {
-                image.close();
-            }
             processingBarcode = false;
         }
     };
@@ -656,8 +651,7 @@ public class QR_codeScanner extends AppCompatActivity {
                         if (processingDialog != null && processingDialog.isShowing()) {
                             processingDialog.dismiss();
                         }
-
-                        // 设置结果为成功并返回主页面，不再显示确认对话框
+                        // 设置结果为成功并返回主页面
                         Log.d(TAG, "WebSocket连接成功，返回主界面");
                         setResult(RESULT_OK);
                         finish();
@@ -669,6 +663,7 @@ public class QR_codeScanner extends AppCompatActivity {
                     }
                 });
             }
+
 
             @Override
             public void onConnectionFailure(String error) {

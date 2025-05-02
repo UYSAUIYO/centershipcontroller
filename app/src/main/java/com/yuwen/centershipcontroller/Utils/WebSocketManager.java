@@ -6,9 +6,9 @@ import android.util.Log;
 
 import androidx.annotation.NonNull;
 
+import com.google.gson.JsonIOException;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.google.gson.JsonSyntaxException;
 
 import java.util.concurrent.TimeUnit;
 
@@ -156,7 +156,7 @@ public class WebSocketManager {
                         }
                     }
                 }
-            } catch (Exception e) {
+            } catch (JsonIOException e) {
                 Log.e(TAG, "解析WebSocket消息出错: " + e.getMessage());
             }
         }

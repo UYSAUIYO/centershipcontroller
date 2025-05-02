@@ -6,8 +6,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 
-import androidx.annotation.NonNull;
-
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -134,9 +132,6 @@ public class MainDeviceSocket {
         return isConnected;
     }
 
-    /**
-     * 开始处理WebSocket连接和通信
-     */
     /**
      * 开始处理WebSocket连接和通信
      */
@@ -395,14 +390,14 @@ public class MainDeviceSocket {
             // 构建消息内容
             StringBuilder messageBuilder = new StringBuilder();
             messageBuilder.append("已成功连接到服务器\n");
-            messageBuilder.append("房间号: ").append(roomId).append("\n\n");
+            messageBuilder.append("设备服务号：").append(roomId).append("\n\n");
 
             if (shipDevices.isEmpty()) {
                 messageBuilder.append("未检测到船舶设备");
             } else {
                 messageBuilder.append("检测到以下船舶设备:\n");
                 for (ShipDevice device : shipDevices) {
-                    messageBuilder.append("设备ID: ").append(device.getDeviceId()).append("\n");
+                    messageBuilder.append("设备ID: ").append(device.getDeviceId().toUpperCase()).append("\n");
                     messageBuilder.append("设备类型: ").append(device.getDeviceType()).append("\n");
                 }
             }
@@ -436,8 +431,8 @@ public class MainDeviceSocket {
         if (deviceInfoCard != null) {
             try {
                 // 设置本设备ID
-                String displayDeviceId = roomId + "+" + DEVICE_ID;
-                deviceInfoCard.setDeviceId(displayDeviceId);
+                String displayDeviceId = roomId + DEVICE_ID;
+                deviceInfoCard.setDeviceId(displayDeviceId.toUpperCase());
 
                 // 设置设备标题和工作状态
                 deviceInfoCard.setDeviceTitle("主控设备");

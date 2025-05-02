@@ -13,10 +13,8 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
-import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.amap.api.location.AMapLocation;
@@ -33,6 +31,7 @@ import com.amap.api.maps.model.LatLng;
 import com.amap.api.maps.model.MyLocationStyle;
 import com.amap.api.services.core.ServiceSettings;
 import com.yuwen.centershipcontroller.Activity.SettingsActivity;
+import com.yuwen.centershipcontroller.Component.CustomDialog;
 import com.yuwen.centershipcontroller.Socket.MainDeviceSocket;
 import com.yuwen.centershipcontroller.Utils.UserSettings;
 import com.yuwen.centershipcontroller.Utils.Utils;
@@ -59,6 +58,7 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
     private AMap aMap;
 
     private DeviceInfoCard deviceInfoCard;
+    private ImageView connectionStatusLight; // 连接状态指示灯
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -156,23 +156,12 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
 
         // 初始化连接状态指示灯
         // 连接状态指示灯
-        ImageView connectionStatusLight = findViewById(R.id.status_light);
+        connectionStatusLight = findViewById(R.id.status_light);
         updateConnectionStatusLight(false); // 默认为未连接状态
 
         // 设置MainDeviceSocket连接状态监听
         MainDeviceSocket.getInstance().setConnectionStatusListener(
                 this::updateConnectionStatusLight
-        );
-        // 注册二维码扫描结果回调
-        qrCodeScannerLauncher = registerForActivityResult(
-                new ActivityResultContracts.StartActivityForResult(),
-                result -> {
-                    Log.d(TAG, "扫码结果返回: " + result.getResultCode());
-                    if (result.getResultCode() == RESULT_OK && result.getData() != null) {
-                        // 处理扫码结果
-                        onQRScanResult(result.getData());
-                    }
-                }
         );
 
     }
@@ -286,13 +275,12 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
         String[] perms;
         // Android 13+ 使用 READ_MEDIA_IMAGES/VIDEO 替代旧权限
         perms = new String[]{Manifest.permission.CAMERA, Manifest.permission.READ_MEDIA_IMAGES};
-
         if (EasyPermissions.hasPermissions(this, perms)) {
             // 权限已授予，可执行相关操作
             Toast.makeText(this, "相机权限已就绪", Toast.LENGTH_SHORT).show();
-            // 调用摄像头功能
+            // 使用传统的方式启动活动
             Intent intent = new Intent(this, QR_codeScanner.class);
-            qrCodeScannerLauncher.launch(intent);
+            startActivityForResult(intent, REQUEST_QR_SCAN);
         } else {
             EasyPermissions.requestPermissions(this, "需要访问相机和媒体文件", REQUEST_CAMERA_PERMISSION, perms);
         }
@@ -310,29 +298,26 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
      * 显示用户协议对话框
      */
     private void showUserAgreementDialog() {
-        new AlertDialog.Builder(this)
-                .setTitle("用户协议")
-                .setMessage("请阅读并同意我们的用户协议...")
-                .setPositiveButton("同意", (dialog, which) -> {
-                    // 用户同意后的操作
-                    Toast.makeText(MainActivity.this, "感谢您的同意!", Toast.LENGTH_SHORT).show();
-                    //定位隐私政策同意
-                    AMapLocationClient.updatePrivacyShow(this,true,true);
-                    AMapLocationClient.updatePrivacyAgree(this,true);
-                    //地图隐私政策同意
-                    MapsInitializer.updatePrivacyShow(this,true,true);
-                    MapsInitializer.updatePrivacyAgree(this,true);
-                    //搜索隐私政策同意
-                    ServiceSettings.updatePrivacyShow(this,true,true);
-                    ServiceSettings.updatePrivacyAgree(this,true);
-                })
-                .setNegativeButton("不同意", (dialog, which) -> {
-                    // 用户不同意，可以选择关闭应用
-                    Toast.makeText(MainActivity.this, "您必须同意用户协议才能使用本应用", Toast.LENGTH_LONG).show();
-                    finish();
-                })
-                .setCancelable(false) // 防止用户通过返回键取消对话框
-                .show();
+        CustomDialog dialog = new CustomDialog(this);
+        dialog.setTitle("用户协议");
+        dialog.setMessage("请阅读并同意我们的用户协议...");
+        dialog.setPositiveButton("同意", v -> {
+            Toast.makeText(MainActivity.this, "感谢您的同意!", Toast.LENGTH_SHORT).show();
+            AMapLocationClient.updatePrivacyShow(this, true, true);
+            AMapLocationClient.updatePrivacyAgree(this, true);
+            MapsInitializer.updatePrivacyShow(this, true, true);
+            MapsInitializer.updatePrivacyAgree(this, true);
+            ServiceSettings.updatePrivacyShow(this, true, true);
+            ServiceSettings.updatePrivacyAgree(this, true);
+            dialog.dismiss();
+        });
+        dialog.setNegativeButton("不同意", v -> {
+            Toast.makeText(MainActivity.this, "您必须同意用户协议才能使用本应用", Toast.LENGTH_LONG).show();
+            finish();
+            dialog.dismiss();
+        });
+        dialog.setCancelable(false);
+        dialog.show();
     }
 
     /**
@@ -555,7 +540,8 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
         if (EasyPermissions.hasPermissions(this, Manifest.permission.CAMERA)) {
             // 摄像头权限已授予，可以启动扫描器
             Intent intent = new Intent(this, QR_codeScanner.class);
-            qrCodeScannerLauncher.launch(intent); // 使用新方式启动
+            // 使用传统的方式启动活动
+            startActivityForResult(intent, REQUEST_QR_SCAN);
         } else {
             // 请求摄像头权限
             requestCameraPermission();
