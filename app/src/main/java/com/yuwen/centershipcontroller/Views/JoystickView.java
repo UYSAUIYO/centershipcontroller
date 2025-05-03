@@ -24,7 +24,11 @@ public class JoystickView extends View {
     // 坐标系定义
     private static final float MIN_OUTPUT = -1.0f;
     private static final float MAX_OUTPUT = 1.0f;
-
+    private static final long UPDATE_INTERVAL = 100; // 新增常量：更新间隔时间（单位：毫秒）
+    private final Paint debugPaint = new Paint();
+    // 交互参数
+    private final float deadZoneRatio = 0.1f;  // 死区占最大半径的比例
+    private final float edgeZoneRatio = 0.05f; // 边缘缓冲比例
     // 控件几何参数
     private float centerX;
     private float centerY;
@@ -32,36 +36,25 @@ public class JoystickView extends View {
     private float thumbY;
     private float thumbRadius;
     private float maxDistance;
-
     // 输出值
     private float normalizedX = 0f; // [-1.0, 1.0]
     private float normalizedY = 0f; // [-1.0, 1.0]
-
     // 绘制工具
     private Drawable backgroundDrawable;
     private Drawable thumbDrawable;
-    private final Paint debugPaint = new Paint();
-
-    // 交互参数
-    private final float deadZoneRatio = 0.1f;  // 死区占最大半径的比例
-    private final float edgeZoneRatio = 0.05f; // 边缘缓冲比例
-
-    // 监听接口
-    public interface JoystickListener {
-        void onJoystickChanged(float x, float y);
-    }
     private JoystickListener listener;
+    private long lastUpdateTime = 0; // 新增变量：记录上次更新时间
 
     public JoystickView(Context context) {
         super(context);
         init(context);
     }
 
+
     public JoystickView(Context context, AttributeSet attrs) {
         super(context, attrs);
         init(context);
     }
-
 
     private void init(Context context) {
         // 初始化图形资源
@@ -112,9 +105,6 @@ public class JoystickView extends View {
         }
         return super.onTouchEvent(event);
     }
-
-    private long lastUpdateTime = 0; // 新增变量：记录上次更新时间
-    private static final long UPDATE_INTERVAL = 100; // 新增常量：更新间隔时间（单位：毫秒）
 
     private void processTouch(float touchX, float touchY) {
         // 获取当前时间
@@ -171,7 +161,6 @@ public class JoystickView extends View {
         }
     }
 
-
     private void resetPosition() {
         normalizedX = 0f;
         normalizedY = 0f;
@@ -194,11 +183,11 @@ public class JoystickView extends View {
 
         // 绘制摇杆
         if (thumbDrawable != null) {
-            int left = (int)(thumbX - thumbRadius);
-            int top = (int)(thumbY - thumbRadius);
+            int left = (int) (thumbX - thumbRadius);
+            int top = (int) (thumbY - thumbRadius);
             thumbDrawable.setBounds(left, top,
-                    left + (int)(thumbRadius*2),
-                    top + (int)(thumbRadius*2));
+                    left + (int) (thumbRadius * 2),
+                    top + (int) (thumbRadius * 2));
             thumbDrawable.draw(canvas);
         }
 
@@ -209,20 +198,20 @@ public class JoystickView extends View {
 
     private void drawBackground(Canvas canvas) {
         if (backgroundDrawable != null) {
-            int left = (int)(centerX - maxDistance);
-            int top = (int)(centerY - maxDistance);
+            int left = (int) (centerX - maxDistance);
+            int top = (int) (centerY - maxDistance);
             backgroundDrawable.setBounds(left, top,
-                    left + (int)(maxDistance*2),
-                    top + (int)(maxDistance*2));
+                    left + (int) (maxDistance * 2),
+                    top + (int) (maxDistance * 2));
             backgroundDrawable.draw(canvas);
         }
     }
+
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
         listener = null;
     }
-
 
     public void setJoystickListener(JoystickListener listener) {
         this.listener = listener;
@@ -234,5 +223,10 @@ public class JoystickView extends View {
 
     public float getNormalizedY() {
         return normalizedY;
+    }
+
+    // 监听接口
+    public interface JoystickListener {
+        void onJoystickChanged(float x, float y);
     }
 }

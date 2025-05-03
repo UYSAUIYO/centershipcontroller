@@ -30,6 +30,7 @@ import com.amap.api.maps.MapsInitializer;
 import com.amap.api.maps.model.LatLng;
 import com.amap.api.maps.model.MyLocationStyle;
 import com.amap.api.services.core.ServiceSettings;
+import com.yuwen.centershipcontroller.Activity.QR_codeScannerActivity;
 import com.yuwen.centershipcontroller.Activity.SettingsActivity;
 import com.yuwen.centershipcontroller.Component.CustomDialog;
 import com.yuwen.centershipcontroller.Component.DeviceInfoCard;
@@ -38,7 +39,6 @@ import com.yuwen.centershipcontroller.Utils.JoySticksDecoder;
 import com.yuwen.centershipcontroller.Utils.UserSettings;
 import com.yuwen.centershipcontroller.Utils.Utils;
 import com.yuwen.centershipcontroller.Views.JoystickView;
-import com.yuwen.centershipcontroller.Activity.QR_codeScannerActivity;
 
 import pub.devrel.easypermissions.AfterPermissionGranted;
 import pub.devrel.easypermissions.EasyPermissions;
@@ -70,6 +70,12 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
     // 设备信息显示组件
     private DeviceInfoCard deviceInfoCard; // 设备状态信息卡片
     private ImageView connectionStatusLight; // WebSocket连接状态指示灯
+    private long lastUpdateTime = 0;
+    // 性能指标统计变量
+    private int updateCount = 0;
+    private long totalInterval = 0;
+    private long minInterval = Long.MAX_VALUE;
+    private long maxInterval = 0;
 
     /**
      * Activity创建时的初始化方法
@@ -313,63 +319,109 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
         dialog.setCancelable(false);
         dialog.show();
     }
+    // 在更新控制值显示方法中添加超时检测
+    private static final long FORCE_SEND_THRESHOLD = 500; // 如果超过500ms未发送则强制发送
 
     /**
      * 更新控制值显示
+     * 并记录每次调用的时间间隔
      */
     private void updateControlValues(float length, float angle) {
+        // 计算本次调用与上次调用的时间间隔
+        long currentTime = System.currentTimeMillis();
+        long interval = 0;
+        if (lastUpdateTime > 0) {
+            interval = currentTime - lastUpdateTime;
+
+            // 如果间隔过长，触发紧急发送（使用无阻塞方法）
+            if (interval > FORCE_SEND_THRESHOLD) {
+                JoySticksDecoder.getInstance().forceSendCommand();
+                Log.w(TAG, "检测到UI更新延迟，触发紧急发送: " + interval + "ms");
+            }
+        }
+        lastUpdateTime = currentTime;
+
+        // 记录日志，包含时间间隔信息
+        Log.d("ControlValues", "长度：" + length + ", 角度：" + angle + ", 调用间隔：" + interval + "ms");
+
+        // 更新UI显示
         TextView lengthText = findViewById(R.id.textView);
         TextView angleText = findViewById(R.id.textView2);
-        Log.e("ControlValues", "长度：" + length + ", 角度：" + angle);
         if (lengthText != null) {
             lengthText.setText(String.valueOf(length));
         }
         if (angleText != null) {
             angleText.setText(String.valueOf(angle));
         }
-
+        // 更新性能统计相关变量（确保不会阻塞UI线程）
+        updatePerformanceMetrics(interval);
         // 提取JoystickView的归一化坐标并传递给JoySticksDecoder
         JoystickView joystickView = findViewById(R.id.joystick_view);
         if (joystickView != null) {
             float normalizedX = joystickView.getNormalizedX();
             float normalizedY = joystickView.getNormalizedY();
-
-            // 更新JoySticksDecoder控制参数
+            // 使用无阻塞方法更新JoySticksDecoder控制参数
             JoySticksDecoder.getInstance().updateJoystickValues(normalizedX, normalizedY);
         }
     }
 
+    /**
+     * 更新性能统计指标
+     *
+     * @param interval 本次调用间隔(毫秒)
+     */
+    private void updatePerformanceMetrics(long interval) {
+        if (interval <= 0) return;
+
+        updateCount++;
+        totalInterval += interval;
+
+        // 更新最大和最小间隔
+        if (interval < minInterval) {
+            minInterval = interval;
+        }
+        if (interval > maxInterval) {
+            maxInterval = interval;
+        }
+
+        // 每30次更新打印一次统计信息
+        if (updateCount % 30 == 0) {
+            double avgInterval = (double) totalInterval / updateCount;
+            Log.i("PerformanceStats", String.format(
+                    "摇杆控制统计: 调用次数=%d, 平均间隔=%.2fms, 最小间隔=%dms, 最大间隔=%dms",
+                    updateCount, avgInterval, minInterval, maxInterval
+            ));
+        }
+    }
 
 
     /**
-     * 处理二维码扫描结果
+     * 处理活动结果回调
+     * 当启动其他活动（例如二维码扫描）并返回结果时，该方法被调用
+     *
+     * @param requestCode 请求码，用于标识启动的活动
+     * @param resultCode  结果码，表示活动结果的状态
+     * @param data        返回的数据，可能为null
      */
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        // 日志记录：输出请求码和结果码，用于调试和跟踪
         Log.d(TAG, "onActivityResult: requestCode=" + requestCode + ", resultCode=" + resultCode);
+
+        // 检查请求码和结果码以确定是否从二维码扫描返回且操作成功
         if (requestCode == REQUEST_QR_SCAN && resultCode == RESULT_OK) {
+            // 扫码成功，开始处理WebSocket连接
             Log.d(TAG, "扫码成功，开始处理WebSocket连接");
+
             // 初始化震动反馈（如果尚未初始化）
             JoySticksDecoder.getInstance().init(this);
+
             // 立即更新UI以反馈连接状态
             updateConnectionStatusLight(true);
-            // 初始化MainDeviceSocket并传递deviceInfoCard
-            MainDeviceSocket mainDeviceSocket = MainDeviceSocket.getInstance();
-            // 设置连接状态监听器
-            mainDeviceSocket.setConnectionStatusListener(isConnected -> {
-                Log.d(TAG, "WebSocket连接状态变化: " + (isConnected ? "已连接" : "未连接"));
-                updateConnectionStatusLight(isConnected);
-                // 在WebSocket连接成功时启动摇杆控制命令发送
-                if (isConnected) {
-                    // 确保初始化震动功能
-                    JoySticksDecoder.getInstance().init(this);
-                    JoySticksDecoder.getInstance().start();
-                } else {
-                    JoySticksDecoder.getInstance().stop();
-                }
-            });
 
+            // 初始化MainDeviceSocket并传递deviceInfoCard
+            MainDeviceSocket mainDeviceSocket = getDeviceSocket();
             mainDeviceSocket.init(this, deviceInfoCard);
 
             // 启动WebSocket连接处理
@@ -377,24 +429,40 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
         }
     }
 
+
+    /**
+     * 获取设备套接字实例，并配置连接状态监听器
+     * <p>
+     * 该方法主要负责获取MainDeviceSocket的实例，并设置连接状态监听器以处理WebSocket连接状态的变化
+     * 当WebSocket连接状态发生变化时，通过日志记录当前连接状态，并调用方法更新连接状态指示
+     * 如果连接成功，将启动摇杆控制命令发送；如果断开连接，将停止摇杆控制命令发送
+     *
+     * @return MainDeviceSocket的实例，用于设备通信
+     */
     @NonNull
-    private MainDeviceSocket getMainDeviceSocket() {
+    private MainDeviceSocket getDeviceSocket() {
+        // 获取MainDeviceSocket的单例实例
         MainDeviceSocket mainDeviceSocket = MainDeviceSocket.getInstance();
         // 设置连接状态监听器
         mainDeviceSocket.setConnectionStatusListener(isConnected -> {
+            // 记录WebSocket连接状态变化
             Log.d(TAG, "WebSocket连接状态变化: " + (isConnected ? "已连接" : "未连接"));
+            // 更新连接状态指示
             updateConnectionStatusLight(isConnected);
-
             // 在WebSocket连接成功时启动摇杆控制命令发送
             if (isConnected) {
+                // 确保初始化震动功能
+                JoySticksDecoder.getInstance().init(this);
+                // 启动摇杆控制命令发送
                 JoySticksDecoder.getInstance().start();
             } else {
+                // 在WebSocket断开连接时停止摇杆控制命令发送
                 JoySticksDecoder.getInstance().stop();
             }
         });
+        // 返回MainDeviceSocket实例
         return mainDeviceSocket;
     }
-
 
     /**
      * 请求权限结果
@@ -519,6 +587,15 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        // 记录最终性能统计
+        if (updateCount > 0) {
+            double avgInterval = (double) totalInterval / updateCount;
+            Log.i("PerformanceStats", String.format(
+                    "最终摇杆控制统计: 调用次数=%d, 平均间隔=%.2fms, 最小间隔=%dms, 最大间隔=%dms",
+                    updateCount, avgInterval, minInterval, maxInterval
+            ));
+        }
+
         // 断开WebSocket连接
         MainDeviceSocket.getInstance().disconnect();
         // 停止控制命令发送

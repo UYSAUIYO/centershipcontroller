@@ -21,25 +21,18 @@ import okio.ByteString;
 
 /**
  * WebSocket连接管理类，负责处理二维码扫描后的WebSocket连接
+ *
  * @author yuwen
  */
 public class WebSocketManager {
     private static final String TAG = "WebSocketManager";
     private static final int NORMAL_CLOSURE_STATUS = 1000;
-
-    private WebSocket webSocket;
     private final OkHttpClient client;
+    private WebSocket webSocket;
     private ConnectionCallback connectionCallback;
     private MessageListener messageListener;
-
-    private static final class InstanceHolder {
-        static final WebSocketManager INSTANCE = new WebSocketManager();
-    }
-
-    // 单例模式
-    public static WebSocketManager getInstance() {
-        return InstanceHolder.INSTANCE;
-    }
+    // 添加获取当前连接URL的方法
+    private String currentUrl = "";
 
     private WebSocketManager() {
         // 初始化OkHttp客户端
@@ -49,8 +42,14 @@ public class WebSocketManager {
                 .build();
     }
 
+    // 单例模式
+    public static WebSocketManager getInstance() {
+        return InstanceHolder.INSTANCE;
+    }
+
     /**
      * 设置连接回调
+     *
      * @param callback 连接回调接口
      */
     public void setConnectionCallback(ConnectionCallback callback) {
@@ -59,6 +58,7 @@ public class WebSocketManager {
 
     /**
      * 设置消息监听器
+     *
      * @param listener 消息监听器接口
      */
     public void setMessageListener(MessageListener listener) {
@@ -67,6 +67,7 @@ public class WebSocketManager {
 
     /**
      * 发送WebSocket消息
+     *
      * @param message 要发送的消息
      * @return 是否发送成功
      */
@@ -84,8 +85,6 @@ public class WebSocketManager {
         return webSocket != null;
     }
 
-    // 添加获取当前连接URL的方法
-    private String currentUrl = "";
     public String getCurrentUrl() {
         return currentUrl;
     }
@@ -109,7 +108,6 @@ public class WebSocketManager {
         webSocket = client.newWebSocket(request, new WebSocketHandler());
     }
 
-
     /**
      * 断开WebSocket连接
      */
@@ -118,6 +116,42 @@ public class WebSocketManager {
             webSocket.close(NORMAL_CLOSURE_STATUS, "用户关闭连接");
             webSocket = null;
         }
+    }
+
+
+    /**
+     * WebSocket连接回调接口
+     */
+    public interface ConnectionCallback {
+        /**
+         * 连接成功回调
+         *
+         * @param message 成功消息
+         */
+        void onConnected(String message);
+
+        /**
+         * 连接失败回调
+         *
+         * @param errorMessage 错误信息
+         */
+        void onFailure(String errorMessage);
+    }
+
+    /**
+     * WebSocket消息监听器接口
+     */
+    public interface MessageListener {
+        /**
+         * 收到消息回调
+         *
+         * @param text 消息内容
+         */
+        void onMessage(String text);
+    }
+
+    private static final class InstanceHolder {
+        static final WebSocketManager INSTANCE = new WebSocketManager();
     }
 
     /**
@@ -188,33 +222,5 @@ public class WebSocketManager {
                         connectionCallback.onFailure("连接失败: " + t.getMessage()));
             }
         }
-    }
-
-    /**
-     * WebSocket连接回调接口
-     */
-    public interface ConnectionCallback {
-        /**
-         * 连接成功回调
-         * @param message 成功消息
-         */
-        void onConnected(String message);
-
-        /**
-         * 连接失败回调
-         * @param errorMessage 错误信息
-         */
-        void onFailure(String errorMessage);
-    }
-
-    /**
-     * WebSocket消息监听器接口
-     */
-    public interface MessageListener {
-        /**
-         * 收到消息回调
-         * @param text 消息内容
-         */
-        void onMessage(String text);
     }
 }
