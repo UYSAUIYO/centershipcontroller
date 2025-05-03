@@ -70,6 +70,7 @@ import java.util.concurrent.TimeUnit;
  * 二维码扫描主界面
  * 使用Camera2 API实现相机预览和实时二维码识别
  * 包含闪光灯控制、相册扫码、全屏模式等功能
+ *
  * @author yuwen
  */
 public class QR_codeScannerActivity extends AppCompatActivity {
@@ -78,7 +79,8 @@ public class QR_codeScannerActivity extends AppCompatActivity {
     // 权限请求码
     private static final int CAMERA_PERMISSION_REQUEST_CODE = 1001;
     private static final int GALLERY_PERMISSION_REQUEST_CODE = 1002;
-
+    private static final long PROCESS_INTERVAL_MS = 500;
+    private final Semaphore cameraOpenCloseLock = new Semaphore(1); // 相机开关锁
     // 摄像头相关成员变量
     private CameraDevice cameraDevice; // 相机设备实例
     private CameraCaptureSession cameraCaptureSession; // 相机捕获会话
@@ -89,9 +91,7 @@ public class QR_codeScannerActivity extends AppCompatActivity {
     private boolean hasFlash = false; // 是否支持闪光灯
     private Size previewSize; // 预览分辨率大小
     private ImageReader imageReader; // 图像读取器（用于获取相机原始数据）
-    private final Semaphore cameraOpenCloseLock = new Semaphore(1); // 相机开关锁
     private boolean processingBarcode = false; // 正在处理二维码标志
-
     // UI组件
     private SurfaceView cameraPreview; // 相机预览SurfaceView
     private QRCodeScannerView scannerView; // 自定义扫描框视图
@@ -101,12 +101,85 @@ public class QR_codeScannerActivity extends AppCompatActivity {
     private Button scanButton; // 扫描按钮（用于相册扫码）
     private Button exitButton; // 退出按钮
     private TextView scanResultText; // 扫描结果文本显示
-
     // 闪光灯状态
     private boolean isFlashOn = false; // 当前闪光灯开关状态
+    /**
+     * 相机设备状态回调
+     * 处理相机打开、断开、错误等情况
+     */
+    private final CameraDevice.StateCallback stateCallback = new CameraDevice.StateCallback() {
+        @Override
+        public void onOpened(@NonNull CameraDevice camera) {
+            Log.d(TAG, "相机已打开");
+            cameraOpenCloseLock.release();
+            cameraDevice = camera;
+            createCameraPreviewSession();
+        }
 
+        @Override
+        public void onDisconnected(@NonNull CameraDevice camera) {
+            Log.d(TAG, "相机已断开连接");
+            cameraOpenCloseLock.release();
+            camera.close();
+            cameraDevice = null;
+        }
+
+        @Override
+        public void onError(@NonNull CameraDevice camera, int error) {
+            Log.e(TAG, "相机打开失败，错误代码: " + error);
+            cameraOpenCloseLock.release();
+            camera.close();
+            cameraDevice = null;
+            Toast.makeText(QR_codeScannerActivity.this, "相机打开失败，请重试", Toast.LENGTH_SHORT).show();
+            finish();
+        }
+    };
     // 图片选择相关
     private ActivityResultLauncher<String> galleryLauncher; // 相册选择启动器
+    // 图像处理间隔常量（毫秒）
+    private long lastProcessTimestamp = 0;
+    /**
+     * 相机图像可用监听器
+     * 处理实时获取的相机图像数据
+     */
+    private final ImageReader.OnImageAvailableListener onImageAvailableListener = reader -> {
+        long currentTime = System.currentTimeMillis();
+
+        // 限制处理频率，防止过度处理
+        if (processingBarcode || (currentTime - lastProcessTimestamp < PROCESS_INTERVAL_MS)) {
+            Image image = reader.acquireLatestImage();
+            if (image != null) {
+                image.close();
+            }
+            return;
+        }
+
+        try (Image image = reader.acquireLatestImage()) {
+            if (image == null) {
+                return;
+            }
+
+            processingBarcode = true;
+            lastProcessTimestamp = currentTime;
+
+            // 获取图像数据
+            ByteBuffer buffer = image.getPlanes()[0].getBuffer();
+            byte[] data = new byte[buffer.remaining()];
+            buffer.get(data);
+
+            // 获取图像尺寸
+            int width = image.getWidth();
+            int height = image.getHeight();
+
+            // 处理图像数据
+            processImageData(data, width, height);
+
+        } catch (Exception e) {
+            Log.e(TAG, "处理相机图像出错", e);
+        } finally {
+            processingBarcode = false;
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -282,38 +355,6 @@ public class QR_codeScannerActivity extends AppCompatActivity {
     }
 
     /**
-     * 相机设备状态回调
-     * 处理相机打开、断开、错误等情况
-     */
-    private final CameraDevice.StateCallback stateCallback = new CameraDevice.StateCallback() {
-        @Override
-        public void onOpened(@NonNull CameraDevice camera) {
-            Log.d(TAG, "相机已打开");
-            cameraOpenCloseLock.release();
-            cameraDevice = camera;
-            createCameraPreviewSession();
-        }
-
-        @Override
-        public void onDisconnected(@NonNull CameraDevice camera) {
-            Log.d(TAG, "相机已断开连接");
-            cameraOpenCloseLock.release();
-            camera.close();
-            cameraDevice = null;
-        }
-
-        @Override
-        public void onError(@NonNull CameraDevice camera, int error) {
-            Log.e(TAG, "相机打开失败，错误代码: " + error);
-            cameraOpenCloseLock.release();
-            camera.close();
-            cameraDevice = null;
-            Toast.makeText(QR_codeScannerActivity.this, "相机打开失败，请重试", Toast.LENGTH_SHORT).show();
-            finish();
-        }
-    };
-
-    /**
      * 创建相机预览会话
      * 配置预览请求并启动预览
      */
@@ -378,57 +419,11 @@ public class QR_codeScannerActivity extends AppCompatActivity {
         }
     }
 
-    // 图像处理间隔常量（毫秒）
-    private long lastProcessTimestamp = 0;
-    private static final long PROCESS_INTERVAL_MS = 500;
-
-    /**
-     * 相机图像可用监听器
-     * 处理实时获取的相机图像数据
-     */
-    private final ImageReader.OnImageAvailableListener onImageAvailableListener = reader -> {
-        long currentTime = System.currentTimeMillis();
-
-        // 限制处理频率，防止过度处理
-        if (processingBarcode || (currentTime - lastProcessTimestamp < PROCESS_INTERVAL_MS)) {
-            Image image = reader.acquireLatestImage();
-            if (image != null) {
-                image.close();
-            }
-            return;
-        }
-
-        try (Image image = reader.acquireLatestImage()) {
-            if (image == null) {
-                return;
-            }
-
-            processingBarcode = true;
-            lastProcessTimestamp = currentTime;
-
-            // 获取图像数据
-            ByteBuffer buffer = image.getPlanes()[0].getBuffer();
-            byte[] data = new byte[buffer.remaining()];
-            buffer.get(data);
-
-            // 获取图像尺寸
-            int width = image.getWidth();
-            int height = image.getHeight();
-
-            // 处理图像数据
-            processImageData(data, width, height);
-
-        } catch (Exception e) {
-            Log.e(TAG, "处理相机图像出错", e);
-        } finally {
-            processingBarcode = false;
-        }
-    };
-
     /**
      * 处理相机图像数据
-     * @param data 图像原始字节数据
-     * @param width 图像宽度
+     *
+     * @param data   图像原始字节数据
+     * @param width  图像宽度
      * @param height 图像高度
      */
     private void processImageData(byte[] data, int width, int height) {
@@ -504,10 +499,11 @@ public class QR_codeScannerActivity extends AppCompatActivity {
 
     /**
      * 解码位图中的二维码
+     *
      * @param bitmap 待解码的位图
      */
     private void decodeBitmap(Bitmap bitmap) {
-        QRCodeProcessor qrProcessor  = new QRCodeProcessor();
+        QRCodeProcessor qrProcessor = new QRCodeProcessor();
         qrProcessor.decodeBitmap(bitmap, new QRCodeProcessor.DecodeCallback() {
             @Override
             public void onDecodeSuccess(Result result) {
@@ -567,6 +563,7 @@ public class QR_codeScannerActivity extends AppCompatActivity {
     /**
      * 处理扫描结果
      * 包含结果展示、震动反馈、声音提示等
+     *
      * @param result 扫描结果字符串
      */
     private void handleScanResult(String result) {
@@ -719,6 +716,7 @@ public class QR_codeScannerActivity extends AppCompatActivity {
     /**
      * 选择最优预览尺寸
      * 优先选择接近4:3或16:9的尺寸
+     *
      * @param choices 可选尺寸列表
      * @return 最优尺寸
      */
@@ -732,7 +730,7 @@ public class QR_codeScannerActivity extends AppCompatActivity {
         for (Size size : choices) {
             if (size.getWidth() <= 1920 && size.getHeight() <= 1080) {
                 float ratio = (float) size.getWidth() / size.getHeight();
-                if ((Math.abs(ratio - 16.0f/9.0f) < 0.2f) || (Math.abs(ratio - 4.0f/3.0f) < 0.2f)) {
+                if ((Math.abs(ratio - 16.0f / 9.0f) < 0.2f) || (Math.abs(ratio - 4.0f / 3.0f) < 0.2f)) {
                     goodSizes.add(size);
                 }
             }

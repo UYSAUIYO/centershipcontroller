@@ -10,6 +10,7 @@ import com.yuwen.centershipcontroller.Component.DeviceInfoCard;
 
 /**
  * 二维码扫描结果处理工具类
+ *
  * @author yuwen
  */
 public class QRCodeResultHandler {
@@ -26,6 +27,7 @@ public class QRCodeResultHandler {
 
     /**
      * 设置设备信息卡片
+     *
      * @param deviceInfoCard 设备信息卡片
      */
     public void setDeviceInfoCard(DeviceInfoCard deviceInfoCard) {
@@ -34,6 +36,7 @@ public class QRCodeResultHandler {
 
     /**
      * 处理扫描结果
+     *
      * @param result 扫描的二维码内容
      */
     public void processResult(String result) {
@@ -65,6 +68,7 @@ public class QRCodeResultHandler {
 
     /**
      * 连接WebSocket
+     *
      * @param url WebSocket URL
      */
     // 修改WebSocket连接处理部分
@@ -94,6 +98,7 @@ public class QRCodeResultHandler {
                     callback.onConnectionSuccess(message);
                 }
             }
+
             @Override
             public void onFailure(String errorMessage) {
                 Log.e(TAG, "WebSocket连接失败: " + errorMessage);
@@ -112,7 +117,6 @@ public class QRCodeResultHandler {
         // 连接WebSocket
         webSocketManager.connect(url);
     }
-
 
 
     /**

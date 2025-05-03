@@ -11,8 +11,8 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.yuwen.centershipcontroller.Component.CustomDialog;
-import com.yuwen.centershipcontroller.Utils.WebSocketManager;
 import com.yuwen.centershipcontroller.Component.DeviceInfoCard;
+import com.yuwen.centershipcontroller.Utils.WebSocketManager;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -24,76 +24,31 @@ import java.util.concurrent.Executors;
 
 /**
  * 主设备WebSocket管理类，负责WebSocket的连接、状态管理和通信
+ *
  * @author yuwen
  */
 public class MainDeviceSocket {
     private static final String TAG = "MainDeviceSocket";
+    private static final String DEVICE_ID = "h832h9eh29h"; // 本设备ID
+    private static final String IDENTITY = "MAIN_DEVICES"; // 本设备类型
+    // 心跳机制相关变量
+    private static final int HEARTBEAT_INTERVAL = 5000; // 心跳间隔10秒
+    private static final int HEARTBEAT_INITIAL_DELAY = 5000; // 初始延迟5秒
     private static MainDeviceSocket instance;
     private final WebSocketManager webSocketManager;
     private final ExecutorService socketThread;
     private final Handler mainHandler;
+    // 船舶设备信息
+    private final List<ShipDevice> shipDevices = new ArrayList<>();
     private Context context;
     private DeviceInfoCard deviceInfoCard;
     private String roomId = "";
-    private static final String DEVICE_ID = "h832h9eh29h"; // 本设备ID
-    private static final String IDENTITY = "MAIN_DEVICES"; // 本设备类型
     private ConnectionStatusListener connectionStatusListener;
     private boolean isConnected = false;
     private CustomDialog statusDialog;
-
-    // 心跳机制相关变量
-    private static final int HEARTBEAT_INTERVAL = 5000; // 心跳间隔10秒
-    private static final int HEARTBEAT_INITIAL_DELAY = 5000; // 初始延迟5秒
     private Handler heartbeatHandler;
     private Runnable heartbeatRunnable;
     private boolean heartbeatActive = false;
-
-    // 船舶设备信息
-    private final List<ShipDevice> shipDevices = new ArrayList<>();
-
-    /**
-     * 船舶设备类
-     */
-    public static class ShipDevice {
-        String deviceId;
-        String identity;
-        String deviceType;
-
-        public ShipDevice(String deviceId, String identity) {
-            this.deviceId = deviceId;
-            this.identity = identity;
-
-            // 根据identity确定设备型号
-            if ("SHIP_DEVICES".equals(identity)) {
-                this.deviceType = "CL-0089";
-            } else {
-                this.deviceType = "未知型号";
-            }
-        }
-
-        public String getDeviceId() {
-            return deviceId;
-        }
-
-        public String getIdentity() {
-            return identity;
-        }
-
-        public String getDeviceType() {
-            return deviceType;
-        }
-    }
-
-    /**
-     * 连接状态监听接口
-     */
-    public interface ConnectionStatusListener {
-        /**
-         * 连接状态变化
-         * @param isConnected 是否已连接
-         */
-        void onConnectionStatusChanged(boolean isConnected);
-    }
 
     // 私有构造函数
     // 私有构造函数
@@ -116,6 +71,16 @@ public class MainDeviceSocket {
     }
 
     /**
+     * 获取单例实例
+     */
+    public static synchronized MainDeviceSocket getInstance() {
+        if (instance == null) {
+            instance = new MainDeviceSocket();
+        }
+        return instance;
+    }
+
+    /**
      * 开始心跳检测
      */
     private void startHeartbeat() {
@@ -127,6 +92,7 @@ public class MainDeviceSocket {
         // 延迟5秒开始第一次心跳
         heartbeatHandler.postDelayed(heartbeatRunnable, HEARTBEAT_INITIAL_DELAY);
     }
+
     /**
      * 停止心跳检测
      */
@@ -137,22 +103,13 @@ public class MainDeviceSocket {
             heartbeatActive = false;
         }
     }
+
     /**
      * 发送心跳查询
      */
     private void sendHeartbeat() {
         Log.d(TAG, "发送心跳查询");
         queryRoomInfo();
-    }
-
-    /**
-     * 获取单例实例
-     */
-    public static synchronized MainDeviceSocket getInstance() {
-        if (instance == null) {
-            instance = new MainDeviceSocket();
-        }
-        return instance;
     }
 
     /**
@@ -232,7 +189,6 @@ public class MainDeviceSocket {
             }
         });
     }
-
 
     /**
      * 通知连接状态变化
@@ -380,6 +336,7 @@ public class MainDeviceSocket {
             Log.e(TAG, "处理房间信息消息出错: " + e.getMessage(), e);
         }
     }
+
     /**
      * 显示断开连接对话框
      */
@@ -422,6 +379,7 @@ public class MainDeviceSocket {
             }
         });
     }
+
     /**
      * 重置UI组件状态
      */
@@ -610,5 +568,50 @@ public class MainDeviceSocket {
         isConnected = false;
         notifyConnectionStatusChanged();
         Log.d(TAG, "WebSocket连接已断开");
+    }
+
+    /**
+     * 连接状态监听接口
+     */
+    public interface ConnectionStatusListener {
+        /**
+         * 连接状态变化
+         *
+         * @param isConnected 是否已连接
+         */
+        void onConnectionStatusChanged(boolean isConnected);
+    }
+
+    /**
+     * 船舶设备类
+     */
+    public static class ShipDevice {
+        String deviceId;
+        String identity;
+        String deviceType;
+
+        public ShipDevice(String deviceId, String identity) {
+            this.deviceId = deviceId;
+            this.identity = identity;
+
+            // 根据identity确定设备型号
+            if ("SHIP_DEVICES".equals(identity)) {
+                this.deviceType = "CL-0089";
+            } else {
+                this.deviceType = "未知型号";
+            }
+        }
+
+        public String getDeviceId() {
+            return deviceId;
+        }
+
+        public String getIdentity() {
+            return identity;
+        }
+
+        public String getDeviceType() {
+            return deviceType;
+        }
     }
 }

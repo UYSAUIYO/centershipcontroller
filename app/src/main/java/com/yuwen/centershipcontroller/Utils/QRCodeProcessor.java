@@ -34,11 +34,6 @@ public class QRCodeProcessor {
         reader.setHints(hints);
     }
 
-    public interface DecodeCallback {
-        void onDecodeSuccess(Result result);
-        void onDecodeFailed();
-    }
-
     public void decodeImage(@NonNull Image image, DecodeCallback callback) {
         if (image.getFormat() != ImageFormat.YUV_420_888) {
             Log.e(TAG, "Unsupported image format");
@@ -83,5 +78,11 @@ public class QRCodeProcessor {
         } finally {
             reader.reset();
         }
+    }
+
+    public interface DecodeCallback {
+        void onDecodeSuccess(Result result);
+
+        void onDecodeFailed();
     }
 }

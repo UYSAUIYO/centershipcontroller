@@ -16,10 +16,10 @@ public class SettingsActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_setting);
-        
+
         // 确保使用支持 ActionBar 的主题
         // 在 AndroidManifest.xml 中设置主题为 Theme.AppCompat 或其子主题
-        
+
         // 设置 ActionBar
         ActionBar actionBar = getSupportActionBar();
         if (actionBar != null) {

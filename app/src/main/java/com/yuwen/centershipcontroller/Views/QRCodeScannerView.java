@@ -15,16 +15,14 @@ import androidx.annotation.NonNull;
  * @author COLORFUL
  */
 public class QRCodeScannerView extends View {
+    private final int scanFrameSize = 550; // 扫描框大小
     private Paint scanFramePaint; // 扫描框画笔
     private Paint scanLinePaint; // 扫描线画笔
     private Paint cornerPaint; // 扫描框角画笔
     private Paint maskPaint; // 蒙版画笔
     private Paint textPaint; // 文字画笔
-
     private int scanLinePosition; // 扫描线位置
     private boolean scanLineGoingDown = true; // 扫描线方向
-
-    private final int scanFrameSize = 550; // 扫描框大小
 
     public QRCodeScannerView(Context context) {
         super(context);
