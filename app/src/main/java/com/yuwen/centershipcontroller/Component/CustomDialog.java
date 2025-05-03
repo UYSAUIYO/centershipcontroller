@@ -18,9 +18,11 @@ import com.yuwen.centershipcontroller.R;
 
 /**
  * 自定义对话框
+ *
  * @author yuwen
  */
 public class CustomDialog extends Dialog {
+    private final Context context;
     private TextView titleTextView;
     private TextView messageTextView;
     private Button positiveButton;
@@ -28,7 +30,6 @@ public class CustomDialog extends Dialog {
     private ImageView iconImageView;
     private Handler autoDismissHandler;
     private Runnable autoDismissRunnable;
-    private final Context context;
 
     public CustomDialog(Context context) {
         super(context);
