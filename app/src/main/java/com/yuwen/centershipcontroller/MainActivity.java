@@ -32,41 +32,61 @@ import com.amap.api.maps.model.MyLocationStyle;
 import com.amap.api.services.core.ServiceSettings;
 import com.yuwen.centershipcontroller.Activity.SettingsActivity;
 import com.yuwen.centershipcontroller.Component.CustomDialog;
+import com.yuwen.centershipcontroller.Component.DeviceInfoCard;
 import com.yuwen.centershipcontroller.Socket.MainDeviceSocket;
+import com.yuwen.centershipcontroller.Utils.JoySticksDecoder;
 import com.yuwen.centershipcontroller.Utils.UserSettings;
 import com.yuwen.centershipcontroller.Utils.Utils;
-import com.yuwen.centershipcontroller.Component.DeviceInfoCard;
 import com.yuwen.centershipcontroller.Views.JoystickView;
-import com.yuwen.centershipcontroller.Views.QR_codeScanner;
+import com.yuwen.centershipcontroller.Activity.QR_codeScannerActivity;
 
 import pub.devrel.easypermissions.AfterPermissionGranted;
 import pub.devrel.easypermissions.EasyPermissions;
 
 /**
+ * 主活动类，负责核心功能模块：
+ * 1. 高德地图集成与定位功能
+ * 2. 设备控制与状态监控
+ * 3. 用户交互与界面管理
+ * 4. 权限请求与生命周期管理
+ * 
  * @author Yuwen
+ * @version 1.0 2023-10-01
  */
 public class MainActivity extends AppCompatActivity implements LocationSource, AMapLocationListener {
     private static final String TAG = "MainActivity";
-    //请求权限码
-    private static final int REQUEST_PERMISSIONS = 9527;
-    private static final int REQUEST_CAMERA_PERMISSION = 9528; // 新增摄像头权限请求码
-    private static final int REQUEST_QR_SCAN = 9529; // WebSocket连接请求码
+    
+    // 权限请求码定义
+    private static final int REQUEST_PERMISSIONS = 9527; // 定位相关权限请求码
+    private static final int REQUEST_CAMERA_PERMISSION = 9528; // 摄像头权限请求码
+    private static final int REQUEST_QR_SCAN = 9529; // 二维码扫描请求码
 
     private ActivityResultLauncher<Intent> qrCodeScannerLauncher;
 
-    private MapView mMapView;//声明一个地图视图对象
-    private AMap aMap;
+    // 地图相关成员变量
+    private MapView mMapView; // 地图视图组件
+    private AMap aMap; // 地图控制器
 
-    private DeviceInfoCard deviceInfoCard;
-    private ImageView connectionStatusLight; // 连接状态指示灯
+    // 设备信息显示组件
+    private DeviceInfoCard deviceInfoCard; // 设备状态信息卡片
+    private ImageView connectionStatusLight; // WebSocket连接状态指示灯
 
+    /**
+     * Activity创建时的初始化方法
+     * 包含以下主要流程：
+     * 1. 系统UI样式配置
+     * 2. 地图SDK初始化
+     * 3. 权限请求处理
+     * 4. 地图与设备控制初始化
+     * 5. 用户界面组件绑定
+     */
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // 设置透明顶部栏和系统状态栏
+        // 系统UI样式配置（沉浸式状态栏）
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            // 使用 WindowInsetsController 替代过时的 SYSTEM_UI_FLAG
+            // 使用现代API实现沉浸式体验
             try {
                 getWindow().setDecorFitsSystemWindows(false);
                 WindowInsetsController insetsController = getWindow().getInsetsController();
@@ -77,8 +97,7 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
                     );
                     insetsController.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
                 } else {
-                    Log.e("UIError", "WindowInsetsController is null. Falling back to legacy flags.");
-                    // 回退到旧的 SYSTEM_UI_FLAG 实现
+                    // 回退到传统实现方案
                     getWindow().setFlags(
                             WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS,
                             WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS
@@ -88,8 +107,7 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
                     );
                 }
             } catch (Exception e) {
-                Log.e("UIError", "Failed to set system UI flags: " + e.getMessage());
-                // 回退到旧的 SYSTEM_UI_FLAG 实现
+                // 异常处理并回退
                 getWindow().setFlags(
                         WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS,
                         WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS
@@ -99,7 +117,7 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
                 );
             }
         } else {
-            // 兼容低版本 API
+            // 兼容旧版本Android
             getWindow().setFlags(
                     WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS,
                     WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS
@@ -111,84 +129,55 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
 
         setContentView(R.layout.activity_main);
 
-        // 确保加载高德地图的原生库
+        // 加载高德地图原生库
         try {
             System.loadLibrary("amap3dmap");
         } catch (UnsatisfiedLinkError e) {
             Log.e("MapError", "Failed to load AMap library: " + e.getMessage());
         }
 
-        requestPermission();
+        requestPermission(); // 发起必要权限请求
 
-        // 地图隐私政策同意
+        // 隐私政策合规设置
         MapsInitializer.updatePrivacyShow(this, true, true);
         MapsInitializer.updatePrivacyAgree(this, true);
 
-        // 定位隐私政策同意
+        // 定位服务隐私设置
         AMapLocationClient.updatePrivacyShow(this, true, true);
         AMapLocationClient.updatePrivacyAgree(this, true);
 
-        // 搜索隐私政策同意
+        // 搜索服务隐私设置
         ServiceSettings.updatePrivacyShow(this, true, true);
         ServiceSettings.updatePrivacyAgree(this, true);
 
-        // 初始化地图
+        // 地图组件初始化
         initMap(savedInstanceState);
 
-        // 获取布局中的JoystickView实例
+        // 摇杆控制器初始化
         JoystickView joystickView = findViewById(R.id.joystick_view);
         UserSettings userSettings = new UserSettings(this);
-        // 设置监听器
-        joystickView.setJoystickListener((length, angle) -> {
-            // 这里可以添加其他操作，例如控制机器人或游戏角色
-            System.out.println("Length: " + length + ", Angle: " + angle);
+        joystickView.setJoystickListener(this::updateControlValues);
 
-            updateControlValues(length, angle);
-        });
+        // 初始化震动反馈
+        JoySticksDecoder.getInstance().init(this);
 
+        // 首次运行检测
         if (userSettings.checkFirstRun()) {
             showUserAgreementDialog();
         }
 
-        // 初始化设备信息卡
+        // 设备信息卡初始化
         deviceInfoCard = findViewById(R.id.device_card);
         initDeviceInfoCard();
 
-        // 初始化连接状态指示灯
-        // 连接状态指示灯
+        // 连接状态指示灯初始化
         connectionStatusLight = findViewById(R.id.status_light);
         updateConnectionStatusLight(false); // 默认为未连接状态
 
-        // 设置MainDeviceSocket连接状态监听
+        // WebSocket连接状态监听
         MainDeviceSocket.getInstance().setConnectionStatusListener(
                 this::updateConnectionStatusLight
         );
-
-    }
-    /**
-     * 处理二维码扫描结果
-     */
-    private void onQRScanResult(@Nullable Intent data) {
-        if (MainActivity.REQUEST_QR_SCAN == REQUEST_QR_SCAN && android.app.Activity.RESULT_OK == RESULT_OK) {
-            Log.d(TAG, "扫码成功，开始处理WebSocket连接");
-
-            // 立即更新UI以反馈连接状态
-            updateConnectionStatusLight(true);
-
-            // 初始化MainDeviceSocket并传递deviceInfoCard
-            MainDeviceSocket mainDeviceSocket = MainDeviceSocket.getInstance();
-
-            // 设置连接状态监听器
-            mainDeviceSocket.setConnectionStatusListener(isConnected -> {
-                Log.d(TAG, "WebSocket连接状态变化: " + (isConnected ? "已连接" : "未连接"));
-                updateConnectionStatusLight(isConnected);
-            });
-
-            mainDeviceSocket.init(this, deviceInfoCard);
-
-            // 启动WebSocket连接处理
-            mainDeviceSocket.start();
-        }
     }
 
 
@@ -229,20 +218,25 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
     }
 
     /**
-     * 初始化地图
+     * 初始化地图配置
+     * 包含以下关键配置：
+     * - 地图隐私协议验证
+     * - 地图视图组件初始化
+     * - 定位蓝点样式配置
+     * - 地图交互设置
      */
     private void initMap(Bundle savedInstanceState) {
-        // 确保地图隐私合规接口已调用
+        // 地图隐私合规接口调用
         MapsInitializer.updatePrivacyShow(this, true, true);
         MapsInitializer.updatePrivacyAgree(this, true);
 
-        // 获取地图视图对象
+        // 地图视图初始化
         mMapView = findViewById(R.id.map);
         if (mMapView == null) {
             Log.e("MapError", "MapView is not found in the layout.");
             return;
         }
-        mMapView.onCreate(savedInstanceState); // 确保调用 onCreate 方法
+        mMapView.onCreate(savedInstanceState);
         if (aMap == null) {
             aMap = mMapView.getMap();
             if (aMap == null) {
@@ -253,10 +247,10 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
             }
         }
 
-        // 隐藏高德地图Logo（通过调整边距实现）
-        aMap.getUiSettings().setLogoBottomMargin(-100); // 负值将Logo移出屏幕下边界
+        // 地图UI定制配置
+        aMap.getUiSettings().setLogoBottomMargin(-100); // 隐藏高德Logo
 
-        // 设置定位蓝点样式
+        // 定位样式配置
         MyLocationStyle myLocationStyle = new MyLocationStyle();
         myLocationStyle.myLocationType(MyLocationStyle.LOCATION_TYPE_FOLLOW);
         myLocationStyle.interval(2000);
@@ -268,18 +262,18 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
     }
 
     /**
-     * 动态请求摄像头权限（兼容不同Android版本）
+     * 请求摄像头权限（用于二维码扫描）
+     * 支持Android 13+的READ_MEDIA_IMAGES权限
      */
     @AfterPermissionGranted(REQUEST_CAMERA_PERMISSION)
     public void requestCameraPermission() {
-        String[] perms;
-        // Android 13+ 使用 READ_MEDIA_IMAGES/VIDEO 替代旧权限
-        perms = new String[]{Manifest.permission.CAMERA, Manifest.permission.READ_MEDIA_IMAGES};
+        String[] perms = new String[]{
+                Manifest.permission.CAMERA, 
+                Manifest.permission.READ_MEDIA_IMAGES
+        };
         if (EasyPermissions.hasPermissions(this, perms)) {
-            // 权限已授予，可执行相关操作
             Toast.makeText(this, "相机权限已就绪", Toast.LENGTH_SHORT).show();
-            // 使用传统的方式启动活动
-            Intent intent = new Intent(this, QR_codeScanner.class);
+            Intent intent = new Intent(this, QR_codeScannerActivity.class);
             startActivityForResult(intent, REQUEST_QR_SCAN);
         } else {
             EasyPermissions.requestPermissions(this, "需要访问相机和媒体文件", REQUEST_CAMERA_PERMISSION, perms);
@@ -323,42 +317,57 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
     /**
      * 更新控制值显示
      */
-    private void updateControlValues(int length, int angle) {
+    private void updateControlValues(float length, float angle) {
         TextView lengthText = findViewById(R.id.textView);
         TextView angleText = findViewById(R.id.textView2);
-
+        Log.e("ControlValues", "长度：" + length + ", 角度：" + angle);
         if (lengthText != null) {
-            lengthText.setText("Length: " + String.format("%d", length));
+            lengthText.setText(String.valueOf(length));
+        }
+        if (angleText != null) {
+            angleText.setText(String.valueOf(angle));
         }
 
-        if (angleText != null) {
-            angleText.setText("Angle: " + String.format("%d", angle));
+        // 提取JoystickView的归一化坐标并传递给JoySticksDecoder
+        JoystickView joystickView = findViewById(R.id.joystick_view);
+        if (joystickView != null) {
+            float normalizedX = joystickView.getNormalizedX();
+            float normalizedY = joystickView.getNormalizedY();
+
+            // 更新JoySticksDecoder控制参数
+            JoySticksDecoder.getInstance().updateJoystickValues(normalizedX, normalizedY);
         }
     }
+
+
 
     /**
      * 处理二维码扫描结果
      */
-    // 在MainActivity.java中添加或修改以下方法
-
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         Log.d(TAG, "onActivityResult: requestCode=" + requestCode + ", resultCode=" + resultCode);
-
         if (requestCode == REQUEST_QR_SCAN && resultCode == RESULT_OK) {
             Log.d(TAG, "扫码成功，开始处理WebSocket连接");
-
+            // 初始化震动反馈（如果尚未初始化）
+            JoySticksDecoder.getInstance().init(this);
             // 立即更新UI以反馈连接状态
             updateConnectionStatusLight(true);
-
             // 初始化MainDeviceSocket并传递deviceInfoCard
             MainDeviceSocket mainDeviceSocket = MainDeviceSocket.getInstance();
-
             // 设置连接状态监听器
             mainDeviceSocket.setConnectionStatusListener(isConnected -> {
                 Log.d(TAG, "WebSocket连接状态变化: " + (isConnected ? "已连接" : "未连接"));
                 updateConnectionStatusLight(isConnected);
+                // 在WebSocket连接成功时启动摇杆控制命令发送
+                if (isConnected) {
+                    // 确保初始化震动功能
+                    JoySticksDecoder.getInstance().init(this);
+                    JoySticksDecoder.getInstance().start();
+                } else {
+                    JoySticksDecoder.getInstance().stop();
+                }
             });
 
             mainDeviceSocket.init(this, deviceInfoCard);
@@ -366,6 +375,24 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
             // 启动WebSocket连接处理
             mainDeviceSocket.start();
         }
+    }
+
+    @NonNull
+    private MainDeviceSocket getMainDeviceSocket() {
+        MainDeviceSocket mainDeviceSocket = MainDeviceSocket.getInstance();
+        // 设置连接状态监听器
+        mainDeviceSocket.setConnectionStatusListener(isConnected -> {
+            Log.d(TAG, "WebSocket连接状态变化: " + (isConnected ? "已连接" : "未连接"));
+            updateConnectionStatusLight(isConnected);
+
+            // 在WebSocket连接成功时启动摇杆控制命令发送
+            if (isConnected) {
+                JoySticksDecoder.getInstance().start();
+            } else {
+                JoySticksDecoder.getInstance().stop();
+            }
+        });
+        return mainDeviceSocket;
     }
 
 
@@ -408,13 +435,13 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
     private AMapLocationClient mlocationClient;//声明定位客户端
 
     /**
-     * 激活定位
+     * 位置定位激活方法
+     * 创建并启动定位客户端，设置定位模式为高精度模式
      */
     @Override
     public void activate(LocationSource.OnLocationChangedListener listener) {
         mListener = listener;
         if (mlocationClient == null) {
-            // 初始化定位
             try {
                 AMapLocationClientOption mLocationOption = new AMapLocationClientOption();
                 mLocationOption.setLocationMode(AMapLocationClientOption.AMapLocationMode.Hight_Accuracy);
@@ -426,13 +453,13 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
                 throw new RuntimeException(e);
             }
         } else {
-            // 新增：确保定位服务已启动
             mlocationClient.startLocation();
         }
     }
 
     /**
-     * 停止定位
+     * 停止定位服务
+     * 释放定位客户端资源
      */
     @Override
     public void deactivate() {
@@ -494,12 +521,14 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
         super.onDestroy();
         // 断开WebSocket连接
         MainDeviceSocket.getInstance().disconnect();
-
+        // 停止控制命令发送
+        JoySticksDecoder.getInstance().stop();
         if (mMapView != null) {
             mMapView.onDestroy(); // 确保调用 onDestroy 方法
         }
         Log.d("MapLifecycle", "MapView onDestroy called.");
     }
+
 
     @Override
     protected void onResume() {
@@ -539,7 +568,7 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
     public void onScannerClick(View view) {
         if (EasyPermissions.hasPermissions(this, Manifest.permission.CAMERA)) {
             // 摄像头权限已授予，可以启动扫描器
-            Intent intent = new Intent(this, QR_codeScanner.class);
+            Intent intent = new Intent(this, QR_codeScannerActivity.class);
             // 使用传统的方式启动活动
             startActivityForResult(intent, REQUEST_QR_SCAN);
         } else {

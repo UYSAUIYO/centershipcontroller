@@ -41,22 +41,21 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
-        <!-- 显示长度参数 -->
+        <!-- activity_joy_stick.xml 参数显示部分更新 -->
         <TextView
-            android:id="@+id/length_value"
+            android:id="@+id/x_value"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Length: 0"
+            android:text="X: 0.00"
             android:textColor="#FFFFFF"
             android:textSize="24sp"
             android:layout_marginBottom="8dp"/>
 
-        <!-- 显示角度参数 -->
         <TextView
-            android:id="@+id/angle_value"
+            android:id="@+id/y_value"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Angle: 0"
+            android:text="Y: 0.00"
             android:textColor="#FFFFFF"
             android:textSize="24sp"/>
     </LinearLayout>

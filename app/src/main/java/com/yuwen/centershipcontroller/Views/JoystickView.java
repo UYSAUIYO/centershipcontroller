@@ -1,5 +1,7 @@
 package com.yuwen.centershipcontroller.Views;
 
+import static androidx.core.math.MathUtils.clamp;
+
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -15,31 +17,40 @@ import androidx.core.content.ContextCompat;
 
 import com.yuwen.centershipcontroller.R;
 
-import java.util.LinkedList;
-import java.util.Queue;
-
+/**
+ * @author yuwen
+ */
 public class JoystickView extends View {
+    // 坐标系定义
+    private static final float MIN_OUTPUT = -1.0f;
+    private static final float MAX_OUTPUT = 1.0f;
+
+    // 控件几何参数
     private float centerX;
     private float centerY;
-    private float thumbX;
+    private float thumbX;  // 新增坐标声明
     private float thumbY;
+    private float thumbRadius;
     private float maxDistance;
 
-    private int normalizedLength = 0; // -100 到 +100
-    private int normalizedAngle = 0;  // -100 到 +100
+    // 输出值
+    private float normalizedX = 0f; // [-1.0, 1.0]
+    private float normalizedY = 0f; // [-1.0, 1.0]
 
-    private Paint backgroundPaint;
-    private Paint thumbPaint;
-    private Paint debugPaint;
-
+    // 绘制工具
     private Drawable backgroundDrawable;
     private Drawable thumbDrawable;
+    private final Paint debugPaint = new Paint();
 
-    private JoystickListener listener;
+    // 交互参数
+    private final float deadZoneRatio = 0.1f;  // 死区占最大半径的比例
+    private final float edgeZoneRatio = 0.05f; // 边缘缓冲比例
 
+    // 监听接口
     public interface JoystickListener {
-        void onJoystickMoved(int length, int angle);
+        void onJoystickChanged(float x, float y);
     }
+    private JoystickListener listener;
 
     public JoystickView(Context context) {
         super(context);
@@ -51,220 +62,177 @@ public class JoystickView extends View {
         init(context);
     }
 
-    public JoystickView(Context context, AttributeSet attrs, int defStyleAttr) {
-        super(context, attrs, defStyleAttr);
-        init(context);
-    }
-
-    private float deadZoneRadius; // 新增死区范围变量
-    private float edgeDeadZoneRadius; // 新增边缘死区范围变量
 
     private void init(Context context) {
-        // 初始化绘制工具
-        backgroundPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        backgroundPaint.setColor(Color.GRAY);
-        backgroundPaint.setStyle(Paint.Style.FILL);
-
-        thumbPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        thumbPaint.setColor(Color.BLUE);
-        thumbPaint.setStyle(Paint.Style.FILL);
-
-        debugPaint = new Paint();
-        debugPaint.setColor(Color.RED);
-        debugPaint.setStrokeWidth(5);
-        debugPaint.setStyle(Paint.Style.STROKE);
-
-        // 加载图片资源
+        // 初始化图形资源
         try {
             backgroundDrawable = ContextCompat.getDrawable(context, R.drawable.joystick_background);
             thumbDrawable = ContextCompat.getDrawable(context, R.drawable.joystick_2);
+
+            // 添加资源检查，避免在绘制时出现空指针异常
+            if (backgroundDrawable == null || thumbDrawable == null) {
+                Log.w("JoystickView", "无法加载一个或多个所需资源");
+            }
         } catch (Exception e) {
-            Log.e("JoystickView", "Failed to load drawable resources", e);
+            Log.e("JoystickView", "资源加载错误", e);
         }
+        // 调试绘制配置
+        debugPaint.setColor(Color.RED);
+        debugPaint.setStyle(Paint.Style.STROKE);
+        debugPaint.setStrokeWidth(4);
 
-        // 设置透明度
-        setLayerType(View.LAYER_TYPE_HARDWARE, null);
-
-        // 初始化死区范围，默认为最大距离的 10%
-        deadZoneRadius = 0;
-        edgeDeadZoneRadius = 0; // 初始化边缘死区范围
+        // 初始化thumb位置
+        thumbX = 0;
+        thumbY = 0;
     }
 
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
 
-        // 计算中心点和最大距离
+        // 计算几何参数
         centerX = w / 2f;
         centerY = h / 2f;
-        maxDistance = Math.min(w, h) / 3f; // 最大移动距离为视图宽高的1/3
-
-        // 初始化死区范围
-        deadZoneRadius = maxDistance * 0.1f;
-        edgeDeadZoneRadius = maxDistance * 0.1f; // 初始化边缘死区范围
-
-        // 初始化遥杆位置为中心点
-        thumbX = centerX;
-        thumbY = centerY;
+        maxDistance = Math.min(w, h) * 0.3f; // 最大移动距离
+        thumbRadius = maxDistance * 0.2f;    // 摇杆头尺寸
     }
 
-    private Queue<Float> signalQueue = new LinkedList<>(); // 新增信号缓存队列
-    private long lastOutputTime = 0; // 新增上次输出时间戳
-    private static final long filterInterval = 300; // 定义滤波时间间隔为300ms
-
     @Override
-    public boolean onTouchEvent(MotionEvent event) {
-        switch (event.getAction()) {
+    public boolean onTouchEvent(@NonNull MotionEvent event) {
+        switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
             case MotionEvent.ACTION_MOVE:
-                // 计算触摸点相对于中心的偏移
-                float newX = event.getX();
-                float newY = event.getY();
-
-                // 计算距离和角度
-                float deltaX = newX - centerX;
-                float deltaY = centerY - newY; // 注意：y轴方向反转以匹配屏幕坐标系
-
-                float distance = (float) Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-
-                // 判断是否在死区内
-                if (distance <= deadZoneRadius) {
-                    thumbX = centerX;
-                    thumbY = centerY;
-                    normalizedLength = 0;
-                    normalizedAngle = 0;
-                } else {
-                    // 限制在最大距离内并更新拇指位置
-                    if (distance > maxDistance) {
-                        float ratio = maxDistance / distance;
-                        deltaX *= ratio;
-                        deltaY *= ratio;
-                        distance = maxDistance;
-                    }
-                    thumbX = centerX + deltaX;
-                    thumbY = centerY - deltaY; // y轴方向反转以匹配屏幕坐标系
-
-                    // 计算标准化长度(-100 到 +100)
-                    normalizedLength = (int) ((distance / maxDistance) * 100); // 直接赋值为整数
-
-                    // 使用 Math.atan2 计算角度，并调整为 [-180, 180] 范围
-                    float angle = (float) Math.toDegrees(Math.atan2(deltaY, deltaX));
-                    if (angle < 0) {
-                        angle += 360; // 转换为 [0, 360]
-                    }
-                    if (angle > 180) {
-                        angle -= 360; // 转换为 [-180, 180]
-                    }
-
-                    // 将角度标准化到 [-100, 100]
-                    normalizedAngle = (int) ((angle / 180) * 100); // 直接赋值为整数
-                }
-
-                // 将计算结果添加到信号队列
-                signalQueue.add((float) normalizedLength);
-                signalQueue.add((float) normalizedAngle);
-
-                // 获取当前时间
-                long currentTime = System.currentTimeMillis();
-
-                // 判断是否超过300ms
-                if (currentTime - lastOutputTime >= filterInterval) {
-                    // 调用滤波算法计算平滑值
-                    int filteredLength = (int) applyFilter(signalQueue);
-                    int filteredAngle = (int) applyFilter(signalQueue);
-
-                    // 通知监听器平滑后的值
-                    if (listener != null) {
-                        listener.onJoystickMoved(filteredLength, filteredAngle);
-                    }
-
-                    // 更新上次输出时间并清空队列
-                    lastOutputTime = currentTime;
-                    signalQueue.clear();
-                }
-
-                invalidate(); // 重绘视图
+                processTouch(event.getX(), event.getY());
                 return true;
 
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_CANCEL:
-                // 重置到中心
-                thumbX = centerX;
-                thumbY = centerY;
-                normalizedLength = 0;
-                normalizedAngle = 0;
-
-                if (listener != null) {
-                    listener.onJoystickMoved(0, 0);
-                }
-
-                invalidate(); // 重绘视图
+                resetPosition();
                 return true;
         }
-
         return super.onTouchEvent(event);
     }
 
-    // 新增滤波方法
-    private float applyFilter(Queue<Float> queue) {
-        if (queue.isEmpty()) {
-            return 0;
+    private long lastUpdateTime = 0; // 新增变量：记录上次更新时间
+    private static final long UPDATE_INTERVAL = 100; // 新增常量：更新间隔时间（单位：毫秒）
+
+    private void processTouch(float touchX, float touchY) {
+        // 获取当前时间
+        long currentTime = System.currentTimeMillis();
+        // 检查是否超过更新间隔
+        if (currentTime - lastUpdateTime < UPDATE_INTERVAL) {
+            return; // 如果未超过间隔时间，则直接返回，不进行更新
         }
-        float sum = 0;
-        for (float value : queue) {
-            sum += value;
+        lastUpdateTime = currentTime; // 更新上次更新时间
+
+        // 计算原始偏移量
+        float deltaX = touchX - centerX;
+        float deltaY = touchY - centerY;
+
+        // 计算极坐标
+        float distance = (float) Math.hypot(deltaX, deltaY);
+        float angle = (float) Math.atan2(deltaY, deltaX);
+
+        // 应用死区处理
+        if (distance < maxDistance * deadZoneRatio) {
+            resetPosition();
+            return;
         }
-        return sum / queue.size(); // 返回平均值
+
+        // 应用边缘缓冲
+        float effectiveDistance = Math.min(distance, maxDistance * (1 - edgeZoneRatio));
+
+        // 标准化输出
+        normalizedX = (effectiveDistance / maxDistance) * (float) Math.cos(angle);
+        normalizedY = (effectiveDistance / maxDistance) * (float) Math.sin(angle);
+
+        // 约束输出范围
+        normalizedX = clamp(normalizedX, MIN_OUTPUT, MAX_OUTPUT);
+        normalizedY = clamp(normalizedY, MIN_OUTPUT, MAX_OUTPUT);
+
+        // 更新摇杆位置
+        updateThumbPosition();
+        notifyListener();
+        invalidate();
+    }
+
+    private void updateThumbPosition() {
+        float oldX = thumbX;
+        float oldY = thumbY;
+
+        float scaledX = normalizedX * maxDistance;
+        float scaledY = normalizedY * maxDistance;
+        thumbX = centerX + scaledX;
+        thumbY = centerY + scaledY;
+
+        // 只有在位置发生变化时才重绘
+        if (oldX != thumbX || oldY != thumbY) {
+            invalidate();
+        }
+    }
+
+
+    private void resetPosition() {
+        normalizedX = 0f;
+        normalizedY = 0f;
+        thumbX = centerX;
+        thumbY = centerY;
+        notifyListener();
+        invalidate();
+    }
+
+    private void notifyListener() {
+        if (listener != null) {
+            listener.onJoystickChanged(normalizedX, normalizedY);
+        }
     }
 
     @Override
     protected void onDraw(@NonNull Canvas canvas) {
-        super.onDraw(canvas);
-
         // 绘制背景
-        if (backgroundDrawable != null) {
-            int left = (int)(centerX - maxDistance * 1.2f);
-            int top = (int)(centerY - maxDistance * 1.2f);
-            int right = (int)(centerX + maxDistance * 1.2f);
-            int bottom = (int)(centerY + maxDistance * 1.2f);
-            backgroundDrawable.setBounds(left, top, right, bottom);
-            backgroundDrawable.draw(canvas);
-        } else {
-            // 备选绘制
-            canvas.drawCircle(centerX, centerY, maxDistance * 1.2f, backgroundPaint);
-        }
+        drawBackground(canvas);
 
-        // 绘制遥杆
+        // 绘制摇杆
         if (thumbDrawable != null) {
-            int thumbSize = (int)(maxDistance * 0.5f);
-            int left = (int)(thumbX - (float) thumbSize / 2);
-            int top = (int)(thumbY - (float) thumbSize / 2);
-            int right = left + thumbSize;
-            int bottom = top + thumbSize;
-            thumbDrawable.setBounds(left, top, right, bottom);
+            int left = (int)(thumbX - thumbRadius);
+            int top = (int)(thumbY - thumbRadius);
+            thumbDrawable.setBounds(left, top,
+                    left + (int)(thumbRadius*2),
+                    top + (int)(thumbRadius*2));
             thumbDrawable.draw(canvas);
-        } else {
-            // 备选绘制
-            canvas.drawCircle(thumbX, thumbY, maxDistance * 0.25f, thumbPaint);
         }
 
-        // 绘制长度和角度文本
-        Paint textPaint = new Paint();
-        textPaint.setColor(Color.BLACK);
-        textPaint.setTextSize(30);
-        canvas.drawText("Length: " + normalizedLength, 20, 40, textPaint); // 使用整数值
-        canvas.drawText("Angle: " + normalizedAngle, 20, 80, textPaint); // 使用整数值
+        // 调试绘制
+        canvas.drawCircle(centerX, centerY, maxDistance * deadZoneRatio, debugPaint);
+        canvas.drawCircle(centerX, centerY, maxDistance * (1 - edgeZoneRatio), debugPaint);
     }
+
+    private void drawBackground(Canvas canvas) {
+        if (backgroundDrawable != null) {
+            int left = (int)(centerX - maxDistance);
+            int top = (int)(centerY - maxDistance);
+            backgroundDrawable.setBounds(left, top,
+                    left + (int)(maxDistance*2),
+                    top + (int)(maxDistance*2));
+            backgroundDrawable.draw(canvas);
+        }
+    }
+    @Override
+    protected void onDetachedFromWindow() {
+        super.onDetachedFromWindow();
+        listener = null;
+    }
+
 
     public void setJoystickListener(JoystickListener listener) {
         this.listener = listener;
     }
 
-    public float getNormalizedLength() {
-        return normalizedLength;
+    public float getNormalizedX() {
+        return normalizedX;
     }
 
-    public float getNormalizedAngle() {
-        return normalizedAngle;
+    public float getNormalizedY() {
+        return normalizedY;
     }
 }

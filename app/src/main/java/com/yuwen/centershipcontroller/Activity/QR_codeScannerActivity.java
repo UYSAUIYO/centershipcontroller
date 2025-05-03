@@ -1,4 +1,4 @@
-package com.yuwen.centershipcontroller.Views;
+package com.yuwen.centershipcontroller.Activity;
 
 import android.Manifest;
 import android.content.Context;
@@ -55,6 +55,7 @@ import com.yuwen.centershipcontroller.R;
 import com.yuwen.centershipcontroller.Utils.QRCodeProcessor;
 import com.yuwen.centershipcontroller.Utils.QRCodeResultHandler;
 import com.yuwen.centershipcontroller.Utils.WebSocketManager;
+import com.yuwen.centershipcontroller.Views.QRCodeScannerView;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -66,56 +67,58 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
 /**
+ * 二维码扫描主界面
+ * 使用Camera2 API实现相机预览和实时二维码识别
+ * 包含闪光灯控制、相册扫码、全屏模式等功能
  * @author yuwen
  */
-public class QR_codeScanner extends AppCompatActivity {
+public class QR_codeScannerActivity extends AppCompatActivity {
+    // 标签用于日志输出
     private static final String TAG = "QR_codeScanner";
+    // 权限请求码
     private static final int CAMERA_PERMISSION_REQUEST_CODE = 1001;
     private static final int GALLERY_PERMISSION_REQUEST_CODE = 1002;
 
     // 摄像头相关成员变量
-    private CameraDevice cameraDevice;
-    private CameraCaptureSession cameraCaptureSession;
-    private CaptureRequest.Builder previewRequestBuilder;
-    private Handler backgroundHandler;
-    private HandlerThread handlerThread;
-    private String cameraId;
-    private boolean hasFlash = false;
-    private Size previewSize;
-    private ImageReader imageReader;
-    private final Semaphore cameraOpenCloseLock = new Semaphore(1);
-    private boolean processingBarcode = false;
+    private CameraDevice cameraDevice; // 相机设备实例
+    private CameraCaptureSession cameraCaptureSession; // 相机捕获会话
+    private CaptureRequest.Builder previewRequestBuilder; // 预览请求构建器
+    private Handler backgroundHandler; // 后台线程Handler
+    private HandlerThread handlerThread; // 后台线程
+    private String cameraId; // 当前使用相机ID
+    private boolean hasFlash = false; // 是否支持闪光灯
+    private Size previewSize; // 预览分辨率大小
+    private ImageReader imageReader; // 图像读取器（用于获取相机原始数据）
+    private final Semaphore cameraOpenCloseLock = new Semaphore(1); // 相机开关锁
+    private boolean processingBarcode = false; // 正在处理二维码标志
 
     // UI组件
-    private SurfaceView cameraPreview;
-    private QRCodeScannerView scannerView;
-    private CustomDialog processingDialog; // 声明用于保存处理中的对话框实例
-    private CustomDialog statusDialog; // 单一对话框引用
-    private Button flashButton;
-    private Button scanButton;
-    private Button exitButton;
-    private TextView scanResultText;
+    private SurfaceView cameraPreview; // 相机预览SurfaceView
+    private QRCodeScannerView scannerView; // 自定义扫描框视图
+    private CustomDialog processingDialog; // 处理中对话框实例
+    private CustomDialog statusDialog; // 状态对话框引用
+    private Button flashButton; // 闪光灯按钮
+    private Button scanButton; // 扫描按钮（用于相册扫码）
+    private Button exitButton; // 退出按钮
+    private TextView scanResultText; // 扫描结果文本显示
 
     // 闪光灯状态
-    private boolean isFlashOn = false;
+    private boolean isFlashOn = false; // 当前闪光灯开关状态
 
-    // 图片选择
-    private ActivityResultLauncher<String> galleryLauncher;
+    // 图片选择相关
+    private ActivityResultLauncher<String> galleryLauncher; // 相册选择启动器
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        // 隐藏状态栏
+        // 隐藏状态栏并设置全屏模式
         Window window = getWindow();
         WindowInsetsControllerCompat windowInsetsController =
                 WindowCompat.getInsetsController(window, window.getDecorView());
-        // 隐藏状态栏
         windowInsetsController.hide(WindowInsetsCompat.Type.statusBars());
-        // 设置系统栏行为
         windowInsetsController.setSystemBarsBehavior(
                 WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         );
-        // 确保内容显示在全屏模式下
         WindowCompat.setDecorFitsSystemWindows(window, false);
 
         setContentView(R.layout.activity_qr_code_scanner);
@@ -128,15 +131,17 @@ public class QR_codeScanner extends AppCompatActivity {
         exitButton = findViewById(R.id.exit_button);
         scanResultText = findViewById(R.id.scan_result_text);
 
-        // 检查设备是否支持闪光灯
+        // 初始化相机管理器并检查闪光灯支持
         CameraManager cameraManager = (CameraManager) getSystemService(CAMERA_SERVICE);
         try {
-            cameraId = cameraManager.getCameraIdList()[0]; // 默认使用后置摄像头
+            // 获取默认后置摄像头ID
+            cameraId = cameraManager.getCameraIdList()[0];
             CameraCharacteristics characteristics = cameraManager.getCameraCharacteristics(cameraId);
+            // 检查闪光灯支持状态
             hasFlash = characteristics.get(CameraCharacteristics.FLASH_INFO_AVAILABLE) != null &&
                     Boolean.TRUE.equals(characteristics.get(CameraCharacteristics.FLASH_INFO_AVAILABLE));
 
-            // 设置闪光灯按钮可用性
+            // 根据闪光灯支持状态设置按钮可用性
             flashButton.setEnabled(hasFlash);
             if (!hasFlash) {
                 flashButton.setAlpha(0.5f);
@@ -147,15 +152,16 @@ public class QR_codeScanner extends AppCompatActivity {
             flashButton.setAlpha(0.5f);
         }
 
-        // 闪光灯按钮点击事件
+        // 初始化闪光灯按钮点击事件
         flashButton.setOnClickListener(v -> toggleFlash());
 
-        // 图库选择器
+        // 初始化相册选择器
         galleryLauncher = registerForActivityResult(
                 new ActivityResultContracts.GetContent(),
                 uri -> {
                     if (uri != null) {
                         try {
+                            // 加载用户选择的图片并解码
                             Bitmap bitmap = BitmapFactory.decodeStream(getContentResolver().openInputStream(uri));
                             decodeBitmap(bitmap);
                         } catch (Exception e) {
@@ -166,11 +172,13 @@ public class QR_codeScanner extends AppCompatActivity {
                 }
         );
 
-        // 相册选择按钮
+        // 相册按钮点击事件
         scanButton.setOnClickListener(v -> {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                // 请求相册权限
                 ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, GALLERY_PERMISSION_REQUEST_CODE);
             } else {
+                // 已授权则启动相册选择
                 galleryLauncher.launch("image/*");
             }
         });
@@ -178,7 +186,7 @@ public class QR_codeScanner extends AppCompatActivity {
         // 退出按钮点击事件
         exitButton.setOnClickListener(v -> finish());
 
-        // 请求摄像头权限
+        // 请求相机权限
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA}, CAMERA_PERMISSION_REQUEST_CODE);
         } else {
@@ -187,16 +195,16 @@ public class QR_codeScanner extends AppCompatActivity {
     }
 
     /**
-     * 设置摄像头预览Surface
+     * 设置相机预览Surface
+     * 包含Surface生命周期回调处理
      */
     private void setupCameraSurface() {
         SurfaceHolder holder = cameraPreview.getHolder();
         holder.addCallback(new SurfaceHolder.Callback() {
             @Override
             public void surfaceCreated(@NonNull SurfaceHolder holder) {
-                // 检查Surface是否有效，并且确保在UI线程之后启动相机
+                // 在Surface创建时启动相机
                 if (holder.getSurface() != null && holder.getSurface().isValid()) {
-                    // 确保在启动预览前先启动后台线程
                     startBackgroundThread();
                     openCamera();
                 }
@@ -204,12 +212,10 @@ public class QR_codeScanner extends AppCompatActivity {
 
             @Override
             public void surfaceChanged(@NonNull SurfaceHolder holder, int format, int width, int height) {
-                // 如果Surface尺寸变化，可能需要重新配置预览
+                // Surface尺寸变化时重新配置预览
                 if (cameraCaptureSession != null) {
                     try {
-                        // 停止当前会话
                         cameraCaptureSession.stopRepeating();
-                        // 使用新的Surface尺寸创建预览请求
                         createCameraPreviewSession();
                     } catch (CameraAccessException e) {
                         Log.e(TAG, "相机预览更新失败", e);
@@ -219,41 +225,45 @@ public class QR_codeScanner extends AppCompatActivity {
 
             @Override
             public void surfaceDestroyed(@NonNull SurfaceHolder holder) {
-                closeCamera(); // Surface销毁处理
+                // Surface销毁时关闭相机
+                closeCamera();
             }
         });
     }
 
     /**
-     * 打开摄像头
+     * 打开相机设备
+     * 包含权限检查、相机特性获取、图像读取器初始化等操作
      */
     private void openCamera() {
         CameraManager manager = (CameraManager) getSystemService(CAMERA_SERVICE);
         try {
+            // 获取相机锁防止并发访问
             if (!cameraOpenCloseLock.tryAcquire(2500, TimeUnit.MILLISECONDS)) {
                 throw new RuntimeException("获取相机锁超时");
             }
 
+            // 重新获取相机ID（可能为空）
             if (cameraId == null) {
-                cameraId = manager.getCameraIdList()[0]; // 默认使用后置摄像头
+                cameraId = manager.getCameraIdList()[0];
             }
 
-            // 获取相机特性
+            // 获取相机特性并配置预览参数
             CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
             StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
             if (map == null) {
                 throw new RuntimeException("无法获取相机预览配置");
             }
 
-            // 选择合适的预览尺寸
+            // 选择最优预览尺寸
             previewSize = chooseOptimalSize(map.getOutputSizes(SurfaceTexture.class));
 
-            // 创建图像读取器用于实时扫描
+            // 创建图像读取器用于实时处理
             imageReader = ImageReader.newInstance(previewSize.getWidth(), previewSize.getHeight(),
                     ImageFormat.YUV_420_888, 2);
             imageReader.setOnImageAvailableListener(onImageAvailableListener, backgroundHandler);
 
-            // 检查权限并打开摄像头
+            // 检查权限并打开相机
             if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
                 manager.openCamera(cameraId, stateCallback, backgroundHandler);
             }
@@ -272,7 +282,8 @@ public class QR_codeScanner extends AppCompatActivity {
     }
 
     /**
-     * 相机状态回调
+     * 相机设备状态回调
+     * 处理相机打开、断开、错误等情况
      */
     private final CameraDevice.StateCallback stateCallback = new CameraDevice.StateCallback() {
         @Override
@@ -297,13 +308,14 @@ public class QR_codeScanner extends AppCompatActivity {
             cameraOpenCloseLock.release();
             camera.close();
             cameraDevice = null;
-            Toast.makeText(QR_codeScanner.this, "相机打开失败，请重试", Toast.LENGTH_SHORT).show();
+            Toast.makeText(QR_codeScannerActivity.this, "相机打开失败，请重试", Toast.LENGTH_SHORT).show();
             finish();
         }
     };
 
     /**
-     * 创建预览会话
+     * 创建相机预览会话
+     * 配置预览请求并启动预览
      */
     private void createCameraPreviewSession() {
         try {
@@ -315,7 +327,7 @@ public class QR_codeScanner extends AppCompatActivity {
             SurfaceHolder holder = cameraPreview.getHolder();
             Surface previewSurface = holder.getSurface();
 
-            // 检查Surface是否有效
+            // 检查Surface有效性
             if (previewSurface == null || !previewSurface.isValid()) {
                 Log.e(TAG, "预览Surface无效");
                 return;
@@ -324,9 +336,9 @@ public class QR_codeScanner extends AppCompatActivity {
             // 创建预览请求
             previewRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
             previewRequestBuilder.addTarget(previewSurface);
-            previewRequestBuilder.addTarget(imageReader.getSurface()); // 添加图像读取器Surface
+            previewRequestBuilder.addTarget(imageReader.getSurface());
 
-            // 设置自动对焦模式
+            // 设置自动对焦模式为连续对焦
             previewRequestBuilder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
 
             // 设置闪光灯初始状态
@@ -335,7 +347,7 @@ public class QR_codeScanner extends AppCompatActivity {
                         isFlashOn ? CaptureRequest.FLASH_MODE_TORCH : CaptureRequest.FLASH_MODE_OFF);
             }
 
-            // 创建相机捕获会话
+            // 创建捕获会话
             cameraDevice.createCaptureSession(
                     Arrays.asList(previewSurface, imageReader.getSurface()),
                     new CameraCaptureSession.StateCallback() {
@@ -343,12 +355,12 @@ public class QR_codeScanner extends AppCompatActivity {
                         public void onConfigured(@NonNull CameraCaptureSession session) {
                             Log.d(TAG, "相机预览会话已配置");
                             if (cameraDevice == null) {
-                                return; // 相机已关闭
+                                return;
                             }
 
                             cameraCaptureSession = session;
                             try {
-                                // 启动预览
+                                // 开始预览
                                 session.setRepeatingRequest(previewRequestBuilder.build(), null, backgroundHandler);
                             } catch (CameraAccessException e) {
                                 Log.e(TAG, "启动预览失败", e);
@@ -358,7 +370,7 @@ public class QR_codeScanner extends AppCompatActivity {
                         @Override
                         public void onConfigureFailed(@NonNull CameraCaptureSession session) {
                             Log.e(TAG, "相机预览会话配置失败");
-                            Toast.makeText(QR_codeScanner.this, "相机预览配置失败", Toast.LENGTH_SHORT).show();
+                            Toast.makeText(QR_codeScannerActivity.this, "相机预览配置失败", Toast.LENGTH_SHORT).show();
                         }
                     }, backgroundHandler);
         } catch (CameraAccessException e) {
@@ -366,13 +378,18 @@ public class QR_codeScanner extends AppCompatActivity {
         }
     }
 
+    // 图像处理间隔常量（毫秒）
     private long lastProcessTimestamp = 0;
-    private static final long PROCESS_INTERVAL_MS = 500; // 每500毫秒处理一次
+    private static final long PROCESS_INTERVAL_MS = 500;
 
+    /**
+     * 相机图像可用监听器
+     * 处理实时获取的相机图像数据
+     */
     private final ImageReader.OnImageAvailableListener onImageAvailableListener = reader -> {
         long currentTime = System.currentTimeMillis();
 
-        // 如果已经在处理中或者距离上次处理时间不足，跳过此帧
+        // 限制处理频率，防止过度处理
         if (processingBarcode || (currentTime - lastProcessTimestamp < PROCESS_INTERVAL_MS)) {
             Image image = reader.acquireLatestImage();
             if (image != null) {
@@ -389,7 +406,7 @@ public class QR_codeScanner extends AppCompatActivity {
             processingBarcode = true;
             lastProcessTimestamp = currentTime;
 
-            // 将图像转换为字节数组
+            // 获取图像数据
             ByteBuffer buffer = image.getPlanes()[0].getBuffer();
             byte[] data = new byte[buffer.remaining()];
             buffer.get(data);
@@ -408,18 +425,20 @@ public class QR_codeScanner extends AppCompatActivity {
         }
     };
 
-
     /**
-     * 处理图像数据
+     * 处理相机图像数据
+     * @param data 图像原始字节数据
+     * @param width 图像宽度
+     * @param height 图像高度
      */
     private void processImageData(byte[] data, int width, int height) {
         try {
-            // 获取相机预览的中心位置
+            // 计算扫描区域（以屏幕中心为基准）
             int centerX = width / 2;
             int centerY = height / 2;
 
-            // 计算扫描区域（使用固定的扫描框大小，而不是依赖UI上的扫描框）
-            int scanSize = Math.min(width, height) / 2; // 扫描区域为宽高中较小值的一半
+            // 固定扫描区域大小为屏幕较小边的一半
+            int scanSize = Math.min(width, height) / 2;
 
             int left = centerX - scanSize / 2;
             int top = centerY - scanSize / 2;
@@ -432,7 +451,7 @@ public class QR_codeScanner extends AppCompatActivity {
             scanWidth = Math.min(scanWidth, width - left);
             scanHeight = Math.min(scanHeight, height - top);
 
-            // 确保所有值都为正数且在图像边界内
+            // 边界检查
             if (left < 0 || top < 0 || scanWidth <= 0 || scanHeight <= 0 ||
                     left + scanWidth > width || top + scanHeight > height) {
                 Log.e(TAG, "扫描区域无效: left=" + left + ", top=" + top +
@@ -440,58 +459,52 @@ public class QR_codeScanner extends AppCompatActivity {
                 return;
             }
 
-            // 日志记录实际扫描区域，帮助调试
+            // 输出调试日志
             Log.d(TAG, "扫描区域: left=" + left + ", top=" + top +
                     ", width=" + scanWidth + ", height=" + scanHeight +
                     ", 图像大小: " + width + "x" + height);
 
-            // 将Y数据转换为YUV亮度源
+            // 创建ZXing需要的亮度源
             PlanarYUVLuminanceSource source = new PlanarYUVLuminanceSource(
                     data, width, height, left, top, scanWidth, scanHeight, false);
 
             // 创建二进制位图
             BinaryBitmap bitmap = new BinaryBitmap(new HybridBinarizer(source));
 
-            // 配置解码选项
+            // 配置解码参数
             Map<DecodeHintType, Object> hints = new EnumMap<>(DecodeHintType.class);
 
-            // 使用集合存储支持的格式
+            // 设置支持的条码格式
             List<BarcodeFormat> formats = new ArrayList<>();
-            formats.add(BarcodeFormat.QR_CODE);
-            // 暂时只支持QR码，减少处理时间和错误可能
-            // formats.add(BarcodeFormat.DATA_MATRIX);
-            // formats.add(BarcodeFormat.CODE_128);
-            // formats.add(BarcodeFormat.EAN_13);
+            formats.add(BarcodeFormat.QR_CODE); // 仅支持QR码
 
             hints.put(DecodeHintType.POSSIBLE_FORMATS, formats);
-            hints.put(DecodeHintType.TRY_HARDER, Boolean.TRUE);
+            hints.put(DecodeHintType.TRY_HARDER, Boolean.TRUE); // 启用深度解码
 
-            // 创建多格式读取器
+            // 创建解码器
             MultiFormatReader reader = new MultiFormatReader();
             reader.setHints(hints);
 
-            // 尝试解码
+            // 执行解码
             Result result = reader.decode(bitmap);
 
-            // 处理扫描结果
+            // 处理解码结果
             if (result != null) {
                 String text = result.getText();
                 if (text != null && !text.isEmpty()) {
-                    // 在主线程更新UI
                     runOnUiThread(() -> handleScanResult(text));
                 }
             }
         } catch (NotFoundException ignored) {
-            // 未找到二维码，正常情况，不需处理
+            // 未找到二维码，正常情况
         } catch (Exception e) {
             Log.e(TAG, "扫描二维码出错: " + e.getMessage(), e);
         }
     }
 
-
-
     /**
      * 解码位图中的二维码
+     * @param bitmap 待解码的位图
      */
     private void decodeBitmap(Bitmap bitmap) {
         QRCodeProcessor qrProcessor  = new QRCodeProcessor();
@@ -505,17 +518,16 @@ public class QR_codeScanner extends AppCompatActivity {
             public void onDecodeFailed() {
                 runOnUiThread(() -> {
                     if (!isFinishing()) {
-                        Toast.makeText(QR_codeScanner.this, "未找到二维码", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(QR_codeScannerActivity.this, "未找到二维码", Toast.LENGTH_SHORT).show();
                     }
                 });
             }
         });
     }
 
-
-
     /**
      * 切换闪光灯状态
+     * 需要确保相机已初始化
      */
     private void toggleFlash() {
         if (!hasFlash) {
@@ -529,17 +541,17 @@ public class QR_codeScanner extends AppCompatActivity {
         }
 
         try {
-            // 切换闪光灯状态
+            // 切换状态
             isFlashOn = !isFlashOn;
 
             // 更新闪光灯模式
             previewRequestBuilder.set(CaptureRequest.FLASH_MODE,
                     isFlashOn ? CaptureRequest.FLASH_MODE_TORCH : CaptureRequest.FLASH_MODE_OFF);
 
-            // 更新预览请求
+            // 提交新的预览请求
             cameraCaptureSession.setRepeatingRequest(previewRequestBuilder.build(), null, backgroundHandler);
 
-            // 更新闪光灯按钮图标
+            // 更新按钮图标
             runOnUiThread(() -> {
                 flashButton.setCompoundDrawablesWithIntrinsicBounds(0,
                         isFlashOn ? R.drawable.ic_flash_on : R.drawable.ic_flash_off, 0, 0);
@@ -551,23 +563,25 @@ public class QR_codeScanner extends AppCompatActivity {
             Toast.makeText(this, "闪光灯控制失败", Toast.LENGTH_SHORT).show();
         }
     }
+
     /**
      * 处理扫描结果
+     * 包含结果展示、震动反馈、声音提示等
+     * @param result 扫描结果字符串
      */
-    // 修改扫描结果处理部分，确保扫描成功后自动返回
     private void handleScanResult(String result) {
         if (result == null || result.isEmpty()) {
             return;
         }
 
-        // 防止重复处理同一个结果
+        // 防止重复处理
         if (processingBarcode) {
             return;
         }
 
         processingBarcode = true;
 
-        // 播放成功声音
+        // 播放提示音
         try {
             MediaPlayer mediaPlayer = MediaPlayer.create(this, R.raw.notification_default_ringtone);
             mediaPlayer.start();
@@ -590,19 +604,19 @@ public class QR_codeScanner extends AppCompatActivity {
             Log.e(TAG, "震动反馈失败", e);
         }
 
-        // 显示初始结果
+        // 显示初步结果
         scanResultText.setText("扫描成功，正在处理...");
         scanResultText.setVisibility(View.VISIBLE);
 
-        // 使用QRCodeResultHandler处理结果
+        // 使用结果处理器处理结果
         QRCodeResultHandler resultHandler = new QRCodeResultHandler(this, new QRCodeResultHandler.QRResultCallback() {
             @Override
             public void onNormalResult(String result) {
-                // 普通扫描结果
+                // 普通扫描结果处理
                 runOnUiThread(() -> {
                     scanResultText.setText("扫描结果: " + result);
 
-                    // 延迟2秒后隐藏结果，继续扫描
+                    // 延迟隐藏结果
                     new Handler(Looper.getMainLooper()).postDelayed(() -> {
                         scanResultText.setVisibility(View.GONE);
                         processingBarcode = false;
@@ -612,25 +626,22 @@ public class QR_codeScanner extends AppCompatActivity {
 
             @Override
             public void onProcessing(String message) {
-                // 正在处理连接
+                // 连接处理中状态
                 runOnUiThread(() -> {
-                    // 在显示对话框前，检查Activity是否已结束
                     if (!isFinishing() && !isDestroyed()) {
                         try {
                             if (processingDialog != null && processingDialog.isShowing()) {
                                 processingDialog.dismiss();
                             }
 
-                            processingDialog = new CustomDialog(QR_codeScanner.this);
+                            processingDialog = new CustomDialog(QR_codeScannerActivity.this);
                             processingDialog.setTitle("连接中");
                             processingDialog.setMessage(message);
                             processingDialog.showLoadingIcon();
                             processingDialog.hideNegativeButton();
                             processingDialog.setPositiveButton("取消", v -> {
                                 processingDialog.dismiss();
-                                // 取消连接
                                 WebSocketManager.getInstance().disconnect();
-                                // 返回
                                 finish();
                             });
                             processingDialog.setCancelable(false);
@@ -644,38 +655,33 @@ public class QR_codeScanner extends AppCompatActivity {
 
             @Override
             public void onConnectionSuccess(String message) {
-                // WebSocket连接成功，直接返回主页面并设置结果
+                // 连接成功处理
                 runOnUiThread(() -> {
                     try {
-                        // 关闭正在显示的对话框
                         if (processingDialog != null && processingDialog.isShowing()) {
                             processingDialog.dismiss();
                         }
-                        // 设置结果为成功并返回主页面
                         Log.d(TAG, "WebSocket连接成功，返回主界面");
                         setResult(RESULT_OK);
                         finish();
                     } catch (Exception e) {
                         Log.e(TAG, "处理连接成功出错", e);
-                        // 确保无论如何都返回主界面
                         setResult(RESULT_OK);
                         finish();
                     }
                 });
             }
 
-
             @Override
             public void onConnectionFailure(String error) {
-                // WebSocket连接失败
+                // 连接失败处理
                 runOnUiThread(() -> {
-                    // 显示失败对话框
                     try {
                         if (processingDialog != null && processingDialog.isShowing()) {
                             processingDialog.dismiss();
                         }
 
-                        CustomDialog dialog = new CustomDialog(QR_codeScanner.this);
+                        CustomDialog dialog = new CustomDialog(QR_codeScannerActivity.this);
                         dialog.setTitle("连接失败");
                         dialog.setMessage("无法连接到服务器: " + error);
                         dialog.showErrorIcon();
@@ -694,11 +700,10 @@ public class QR_codeScanner extends AppCompatActivity {
 
             @Override
             public void onError(String error) {
-                // 处理错误
+                // 错误处理
                 runOnUiThread(() -> {
                     scanResultText.setText("错误: " + error);
 
-                    // 延迟2秒后隐藏结果，继续扫描
                     new Handler(Looper.getMainLooper()).postDelayed(() -> {
                         scanResultText.setVisibility(View.GONE);
                         processingBarcode = false;
@@ -707,26 +712,26 @@ public class QR_codeScanner extends AppCompatActivity {
             }
         });
 
-        // 处理扫描结果
+        // 开始处理结果
         resultHandler.processResult(result);
     }
 
-
     /**
-     * 选择最优的预览尺寸
+     * 选择最优预览尺寸
+     * 优先选择接近4:3或16:9的尺寸
+     * @param choices 可选尺寸列表
+     * @return 最优尺寸
      */
     private Size chooseOptimalSize(Size[] choices) {
-        // 默认为较小的尺寸，避免性能问题
         if (choices == null || choices.length == 0) {
             return new Size(640, 480);
         }
 
-        // 先筛选出宽高比接近16:9或4:3，且不大于1080p的尺寸
+        // 筛选宽高比接近16:9或4:3且不超过1080p的尺寸
         List<Size> goodSizes = new ArrayList<>();
         for (Size size : choices) {
             if (size.getWidth() <= 1920 && size.getHeight() <= 1080) {
                 float ratio = (float) size.getWidth() / size.getHeight();
-                // 允许16:9或4:3的宽高比（带一点误差范围）
                 if ((Math.abs(ratio - 16.0f/9.0f) < 0.2f) || (Math.abs(ratio - 4.0f/3.0f) < 0.2f)) {
                     goodSizes.add(size);
                 }
@@ -734,7 +739,7 @@ public class QR_codeScanner extends AppCompatActivity {
         }
 
         if (goodSizes.isEmpty()) {
-            // 如果没有找到合适的宽高比，则选择不超过1080p的最大尺寸
+            // 选择不超过1080p的最大尺寸
             Size result = choices[0];
             for (Size size : choices) {
                 if (size.getWidth() <= 1920 && size.getHeight() <= 1080 &&
@@ -744,8 +749,7 @@ public class QR_codeScanner extends AppCompatActivity {
             }
             return result;
         } else {
-            // 在合适宽高比的尺寸中，选择分辨率适中的（不要太大也不要太小）
-            // 优先选640x480左右的尺寸，它对扫描来说通常足够了
+            // 选择最接近640x480的尺寸
             Size bestSize = goodSizes.get(0);
             int bestDiff = Integer.MAX_VALUE;
 
@@ -761,14 +765,13 @@ public class QR_codeScanner extends AppCompatActivity {
         }
     }
 
-
-    // 生命周期管理
+    // 生命周期方法
     @Override
     protected void onResume() {
         super.onResume();
         startBackgroundThread();
 
-        // 如果Surface已创建，则重新启动相机预览
+        // 重启相机预览
         if (cameraPreview.getHolder().getSurface() != null &&
                 cameraPreview.getHolder().getSurface().isValid()) {
             openCamera();
@@ -781,11 +784,12 @@ public class QR_codeScanner extends AppCompatActivity {
         stopBackgroundThread();
         super.onPause();
     }
+
     @Override
     protected void onDestroy() {
         super.onDestroy();
 
-        // 安全关闭所有对话框
+        // 安全关闭对话框
         if (processingDialog != null && processingDialog.isShowing()) {
             try {
                 processingDialog.dismiss();
@@ -794,19 +798,17 @@ public class QR_codeScanner extends AppCompatActivity {
             }
         }
 
-        // 停止相机和释放资源
+        // 释放相机资源
         closeCamera();
         stopBackgroundThread();
         Log.d(TAG, "相机资源已释放");
         Log.d(TAG, "后台处理线程已停止");
     }
 
-
     /**
      * 启动后台线程
      */
     private void startBackgroundThread() {
-        // 确保先停止之前的线程
         stopBackgroundThread();
 
         handlerThread = new HandlerThread("CameraBackground");
@@ -833,7 +835,7 @@ public class QR_codeScanner extends AppCompatActivity {
     }
 
     /**
-     * 关闭摄像头
+     * 关闭相机设备
      */
     private void closeCamera() {
         try {

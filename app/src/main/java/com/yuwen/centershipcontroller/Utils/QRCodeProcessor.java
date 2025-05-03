@@ -5,6 +5,8 @@ import android.graphics.ImageFormat;
 import android.media.Image;
 import android.util.Log;
 
+import androidx.annotation.NonNull;
+
 import com.google.zxing.BarcodeFormat;
 import com.google.zxing.BinaryBitmap;
 import com.google.zxing.DecodeHintType;
@@ -37,7 +39,7 @@ public class QRCodeProcessor {
         void onDecodeFailed();
     }
 
-    public void decodeImage(Image image, DecodeCallback callback) {
+    public void decodeImage(@NonNull Image image, DecodeCallback callback) {
         if (image.getFormat() != ImageFormat.YUV_420_888) {
             Log.e(TAG, "Unsupported image format");
             callback.onDecodeFailed();
@@ -57,7 +59,7 @@ public class QRCodeProcessor {
         processImage(new BinaryBitmap(new HybridBinarizer(source)), callback);
     }
 
-    public void decodeBitmap(Bitmap bitmap, DecodeCallback callback) {
+    public void decodeBitmap(@NonNull Bitmap bitmap, DecodeCallback callback) {
         int[] pixels = new int[bitmap.getWidth() * bitmap.getHeight()];
         bitmap.getPixels(pixels, 0, bitmap.getWidth(), 0, 0, bitmap.getWidth(), bitmap.getHeight());
         byte[] data = new byte[pixels.length];
@@ -72,7 +74,7 @@ public class QRCodeProcessor {
         processImage(new BinaryBitmap(new HybridBinarizer(source)), callback);
     }
 
-    private void processImage(BinaryBitmap bitmap, DecodeCallback callback) {
+    private void processImage(BinaryBitmap bitmap, @NonNull DecodeCallback callback) {
         try {
             Result result = reader.decodeWithState(bitmap);
             callback.onDecodeSuccess(result);

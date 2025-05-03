@@ -37,7 +37,7 @@
         android:usesCleartextTraffic="true"
         tools:targetApi="34">
         <activity
-            android:name=".Views.QR_codeScanner"
+            android:name=".Activity.QR_codeScannerActivity"
             android:exported="false" />
 
         <meta-data
