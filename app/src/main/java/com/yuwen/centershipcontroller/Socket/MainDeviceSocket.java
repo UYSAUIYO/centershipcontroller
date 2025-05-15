@@ -49,6 +49,11 @@ public class MainDeviceSocket {
     private Handler heartbeatHandler;
     private Runnable heartbeatRunnable;
     private boolean heartbeatActive = false;
+    // 新增变量
+    private boolean isReconnecting = false; // 是否正在尝试重连
+    private static final int RECONNECT_INTERVAL = 5000; // 重连间隔时间（毫秒）
+    private Handler reconnectHandler = new Handler(Looper.getMainLooper());
+    private Runnable reconnectRunnable; // 重连任务
 
     // 私有构造函数
     // 私有构造函数
@@ -221,6 +226,13 @@ public class MainDeviceSocket {
                     return;
                 }
             }
+            // 检查是否是GPS数据
+            if (message.contains("\"GPS\"")) {
+                // 将GPS数据传递给ShipDevicesSocket处理
+                ShipDevicesSocket.getInstance().processMessage(message);
+                return;
+            }
+
             // 处理房间消息
             if (jsonObject.has("type") && "room".equals(jsonObject.get("type").getAsString())) {
                 handleRoomMessage(jsonObject);
@@ -266,18 +278,19 @@ public class MainDeviceSocket {
             if (jsonObject.has("room_id")) {
                 roomId = jsonObject.get("room_id").getAsString();
                 Log.d(TAG, "设置房间ID: " + roomId);
+
                 // 检查是否满足连接条件
-                boolean hasValidConnection = false;
                 boolean hasShipDevice = false;
                 int totalClients = 0;
-
                 // 获取客户端总数
                 if (jsonObject.has("total_clients")) {
                     totalClients = jsonObject.get("total_clients").getAsInt();
                     Log.d(TAG, "房间内客户端总数: " + totalClients);
                 }
+
                 // 清空之前的设备列表
                 shipDevices.clear();
+
                 // 解析客户端列表
                 if (jsonObject.has("clients") && jsonObject.get("clients").isJsonArray()) {
                     JsonArray clientsArray = jsonObject.getAsJsonArray("clients");
@@ -297,25 +310,43 @@ public class MainDeviceSocket {
                         }
                     }
                 }
+                // 修改的逻辑: 如果没有船舶设备，但已经进入房间，不断开WebSocket连接，而是显示设备连接失败并尝试重连
+                if (!hasShipDevice) {
+                    Log.d(TAG, "进入房间成功，但未检测到船舶设备");
 
-                // 判断连接条件：客户端数量>=2且存在船舶设备
-                hasValidConnection = (totalClients >= 2) && hasShipDevice;
+                    // 如果已经存在心跳检测，说明之前已经连接过，这次是重连检查
+                    if (heartbeatActive) {
+                        // 如果未处于重连状态，显示设备连接失败提示并启动重连
+                        if (!isReconnecting) {
+                            showDeviceNotFoundDialog();
+                            startReconnecting();
+                        }
+                        // 如果已经在重连中，仅记录日志，继续重连
+                        else {
+                            Log.d(TAG, "正在继续尝试连接到船舶设备");
+                        }
+                    } else {
+                        // 首次连接，显示设备连接失败提示并启动重连
+                        showDeviceNotFoundDialog();
+                        // 初始化并启动心跳检测，这样可以持续查询房间信息
+                        startHeartbeat();
+                        // 启动重连尝试
+                        startReconnecting();
+                    }
 
-                if (!hasValidConnection) {
-                    // 不满足连接条件，断开WebSocket连接
-                    Log.d(TAG, "船舶设备已断开，断开WebSocket连接");
-                    disconnect();
-
-                    // 显示断联弹窗
-                    showDisconnectDialog();
-
-                    // 重置UI组件状态
-                    resetUIComponents();
+                    // 仍然更新UI，但显示为未连接到具体设备的状态
+                    updateDeviceInfoForConnectionWithoutShip();
 
                     return;
                 }
+
+                // 如果之前在重连中，并且现在找到了设备，取消重连状态
+                if (isReconnecting) {
+                    stopReconnecting();
+                }
+
                 // 在主线程更新UI并显示对话框（仅在首次连接或重新连接时）
-                if (shipDevices.size() > 0 && !heartbeatActive) {
+                if (shipDevices.size() > 0) {
                     mainHandler.post(() -> {
                         try {
                             // 1. 先更新设备信息卡
@@ -323,9 +354,10 @@ public class MainDeviceSocket {
                             // 2. 然后显示连接成功对话框
                             showDeviceInfoDialog();
                             Log.d(TAG, "已更新UI和显示对话框");
-
-                            // 3. 启动心跳检测
-                            startHeartbeat();
+                            // 3. 确保心跳检测正在运行
+                            if (!heartbeatActive) {
+                                startHeartbeat();
+                            }
                         } catch (Exception e) {
                             Log.e(TAG, "更新UI过程中出错: " + e.getMessage(), e);
                         }
@@ -338,31 +370,57 @@ public class MainDeviceSocket {
     }
 
     /**
-     * 显示断开连接对话框
+     * 更新设备信息卡片为未连接船舶设备状态
+     * 在连接到服务器但未找到船舶设备时使用
      */
-    private void showDisconnectDialog() {
-        if (context == null) {
-            Log.e(TAG, "上下文为空，无法显示对话框");
+    private void updateDeviceInfoForConnectionWithoutShip() {
+        if (deviceInfoCard != null) {
+            try {
+                mainHandler.post(() -> {
+                    // 设置本设备ID
+                    String displayDeviceId = roomId + DEVICE_ID;
+                    deviceInfoCard.setDeviceId(displayDeviceId.toUpperCase());
+                    // 设置设备标题和工作状态
+                    deviceInfoCard.setDeviceTitle("主控设备");
+                    deviceInfoCard.setWorkStatus("等待设备连接");
+                    // 更新按钮文本
+                    deviceInfoCard.setButtonText("已连接服务器");
+
+                    // 设置设备类型
+                    deviceInfoCard.setDeviceType("管理端");
+
+                    Log.d(TAG, "设备信息卡片已更新为等待设备连接状态");
+                });
+            } catch (Exception e) {
+                Log.e(TAG, "更新设备信息卡片出错: " + e.getMessage(), e);
+            }
+        } else {
+            Log.e(TAG, "设备信息卡片为空，无法更新");
+        }
+    }
+    /**
+     * 显示未找到设备对话框
+     * 提示用户已进入房间但未检测到船舶设备
+     */
+    private void showDeviceNotFoundDialog() {
+        if (context == null || isFinishing()) {
+            Log.e(TAG, "上下文无效或已结束，无法显示对话框");
             return;
         }
-        // 检查上下文是否是Activity并且已经结束
-        if (context instanceof Activity) {
-            Activity activity = (Activity) context;
-            if (activity.isFinishing() || activity.isDestroyed()) {
-                Log.e(TAG, "Activity已结束，无法显示对话框");
-                return;
-            }
-        }
+
         mainHandler.post(() -> {
             try {
                 // 先关闭任何已存在的对话框
                 dismissCurrentDialog();
+
                 // 创建新对话框
                 statusDialog = new CustomDialog(context);
-                statusDialog.setTitle("连接断开");
-                statusDialog.setMessage("船舶设备已断开连接，请检查设备状态后重新扫码连接。");
-                statusDialog.showErrorIcon();
+                statusDialog.setTitle("等待设备连接");
+                statusDialog.setMessage("已成功连接到服务器，房间ID：" + roomId +
+                        "\n\n未检测到船舶设备，正在等待设备连接...\n\n将继续尝试连接，请确保船舶设备已启动并连接到网络。");
+                statusDialog.showLoadingIcon();
                 statusDialog.hideNegativeButton();
+
                 // 点击确定关闭对话框
                 statusDialog.setPositiveButton("确定", v -> {
                     try {
@@ -371,41 +429,77 @@ public class MainDeviceSocket {
                         Log.e(TAG, "关闭对话框出错: " + e.getMessage(), e);
                     }
                 });
+
                 statusDialog.setCancelable(false);
                 statusDialog.show();
-                Log.d(TAG, "断开连接对话框已显示");
+
+                // 设置自动关闭
+                statusDialog.autoDismiss(10000); // 10秒后自动关闭，避免阻塞用户操作
+
+                Log.d(TAG, "设备未找到对话框已显示");
             } catch (Exception e) {
                 Log.e(TAG, "显示对话框出错: " + e.getMessage(), e);
             }
         });
     }
-
     /**
-     * 重置UI组件状态
+     * 启动设备重连尝试
      */
-    private void resetUIComponents() {
-        mainHandler.post(() -> {
-            try {
-                if (deviceInfoCard != null) {
-                    // 重置设备信息卡
-                    deviceInfoCard.setDeviceTitle("主控设备");
-                    deviceInfoCard.setDeviceType("管理端");
-                    deviceInfoCard.setDeviceId("未连接");
-                    deviceInfoCard.setWorkStatus("未连接");
-                    deviceInfoCard.setWorkArea("未分配");
-                    deviceInfoCard.setBatteryLevel(100);
-                    deviceInfoCard.setBatteryStatus(true);
-                    deviceInfoCard.setButtonText("连接设备");
-                }
-                // 更新连接状态
-                isConnected = false;
-                notifyConnectionStatusChanged();
+    private void startReconnecting() {
+        // 避免重复启动重连
+        if (isReconnecting) {
+            return;
+        }
 
-                Log.d(TAG, "UI组件已重置为初始状态");
-            } catch (Exception e) {
-                Log.e(TAG, "重置UI组件出错: " + e.getMessage(), e);
+        isReconnecting = true;
+        Log.d(TAG, "开始尝试重连船舶设备");
+
+        // 创建重连任务
+        reconnectRunnable = new Runnable() {
+            @Override
+            public void run() {
+                Log.d(TAG, "执行重连检查...");
+                if (isConnected && !isFinishing()) {
+                    // 查询房间信息以检查是否已经有船舶设备
+                    queryRoomInfo();
+                    // 安排下一次重连检查
+                    reconnectHandler.postDelayed(this, RECONNECT_INTERVAL);
+                } else {
+                    // 如果WebSocket已断开或Activity已结束，停止重连
+                    stopReconnecting();
+                }
             }
-        });
+        };
+
+        // 启动第一次重连检查
+        reconnectHandler.postDelayed(reconnectRunnable, RECONNECT_INTERVAL);
+    }
+    /**
+     * 停止设备重连尝试
+     */
+    private void stopReconnecting() {
+        if (isReconnecting) {
+            Log.d(TAG, "停止重连尝试");
+            isReconnecting = false;
+            if (reconnectHandler != null && reconnectRunnable != null) {
+                reconnectHandler.removeCallbacks(reconnectRunnable);
+            }
+        }
+    }
+    /**
+     * 检查Activity是否已结束
+     */
+    private boolean isFinishing() {
+        if (context == null) {
+            return true;
+        }
+
+        if (context instanceof Activity) {
+            Activity activity = (Activity) context;
+            return activity.isFinishing() || activity.isDestroyed();
+        }
+
+        return false;
     }
 
     /**
@@ -557,17 +651,34 @@ public class MainDeviceSocket {
 
     /**
      * 断开连接
+     * 修改后的逻辑，添加了是否强制断开的选项
+     *
+     * @param forceDisconnect 是否强制断开，如果为true则无论重连状态如何都断开
      */
-    public void disconnect() {
+    public void disconnect(boolean forceDisconnect) {
+        // 如果正在重连且不是强制断开，则保持连接
+        if (isReconnecting && !forceDisconnect) {
+            Log.d(TAG, "正在尝试重连，保持WebSocket连接");
+            return;
+        }
+        // 停止重连
+        stopReconnecting();
+
         // 停止心跳
         stopHeartbeat();
-
         if (webSocketManager != null) {
             webSocketManager.disconnect();
         }
         isConnected = false;
         notifyConnectionStatusChanged();
         Log.d(TAG, "WebSocket连接已断开");
+    }
+
+    /**
+     * 兼容原有调用的断开连接方法，默认强制断开
+     */
+    public void disconnect() {
+        disconnect(true);
     }
 
     /**

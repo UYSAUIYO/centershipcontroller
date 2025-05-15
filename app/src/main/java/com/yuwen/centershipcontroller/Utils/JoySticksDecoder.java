@@ -21,8 +21,6 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -55,9 +53,8 @@ public class JoySticksDecoder {
     private final AtomicReference<JoystickInput> latestInput = new AtomicReference<>();
     private final AtomicReference<ControlCommand> latestCommand = new AtomicReference<>(ControlCommand.createZeroCommand());
     private static final float EDGE_BUFFER_ZONE = 0.05f; // 边缘缓冲区
-    private static final long HEARTBEAT_INTERVAL = 200; // 心跳间隔(ms)，用于检测超时
-    private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private static final long BUFFER_CLEAR_TIMEOUT = 300; // 缓冲区清空超时
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private static final long DIRECTION_CHANGE_VIBRATION = 100; // 减少震动时间
     private static final long START_STOP_VIBRATION = 40;
     private static final long EDGE_VIBRATION = 30;
@@ -65,8 +62,6 @@ public class JoySticksDecoder {
     // 移除冗余线程，使用优化的线程模型
     private final HandlerThread controllerThread;
     private final Handler controllerHandler;
-    // 添加定时执行器，用于超时处理和心跳
-    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
     // 添加振动执行器，避免在主线程振动
     private final ExecutorService vibrationExecutor = Executors.newSingleThreadExecutor();
     // 添加命令缓存，预计算常用命令
@@ -254,9 +249,6 @@ public class JoySticksDecoder {
             Log.e(TAG, "发送停止命令失败: " + e.getMessage());
         }
 
-        // 启动心跳检查，定期检测超时和发送状态更新
-        scheduler.scheduleWithFixedDelay(this::heartbeatCheck, HEARTBEAT_INTERVAL, HEARTBEAT_INTERVAL, TimeUnit.MILLISECONDS);
-
         Log.i(TAG, "摇杆控制处理器已启动");
     }
 
@@ -269,9 +261,6 @@ public class JoySticksDecoder {
         }
 
         try {
-            // 取消所有定时任务
-            scheduler.shutdownNow();
-
             // 发送停止命令
             ControlCommand stopCommand = commandCache.get("zero");
             if (stopCommand == null) {
@@ -294,43 +283,6 @@ public class JoySticksDecoder {
         Log.i(TAG, "摇杆控制处理器已停止");
     }
 
-    /**
-     * 心跳检查，定期执行以确保系统正常运行
-     */
-    private void heartbeatCheck() {
-        if (!running.get()) return;
-
-        try {
-            long currentTime = System.currentTimeMillis();
-
-            // 检查输入超时，如果长时间无输入则发送零命令
-            if (lastInputTime > 0 && (currentTime - lastInputTime) > BUFFER_CLEAR_TIMEOUT) {
-                ControlCommand zeroCommand = commandCache.get("zero");
-                if (zeroCommand == null) {
-                    zeroCommand = ControlCommand.createZeroCommand();
-                }
-                directSendCommand(zeroCommand);
-
-                // 重置状态
-                lastInputTime = 0;
-                inputFilter.reset();
-                if (DEBUG) Log.d(TAG, "心跳检测: 输入超时，发送零命令");
-            }
-
-            // 检测命令发送超时
-            if (lastCommandTime > 0 && (currentTime - lastCommandTime) > 500) {
-                emergencyForceSend.set(true);
-                if (DEBUG) Log.d(TAG, "心跳检测: 命令发送延迟，触发强制发送");
-            }
-
-        } catch (Exception e) {
-            Log.e(TAG, "心跳检查异常: " + e.getMessage());
-        }
-    }
-
-    /**
-     * 强制发送当前命令
-     */
     public void forceSendCommand() {
         emergencyForceSend.set(true);
         controllerHandler.post(() -> {

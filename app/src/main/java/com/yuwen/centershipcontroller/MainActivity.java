@@ -35,6 +35,7 @@ import com.yuwen.centershipcontroller.Activity.SettingsActivity;
 import com.yuwen.centershipcontroller.Component.CustomDialog;
 import com.yuwen.centershipcontroller.Component.DeviceInfoCard;
 import com.yuwen.centershipcontroller.Socket.MainDeviceSocket;
+import com.yuwen.centershipcontroller.Socket.ShipDevicesSocket;
 import com.yuwen.centershipcontroller.Utils.JoySticksDecoder;
 import com.yuwen.centershipcontroller.Utils.UserSettings;
 import com.yuwen.centershipcontroller.Utils.Utils;
@@ -66,6 +67,8 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
     // 地图相关成员变量
     private MapView mMapView; // 地图视图组件
     private AMap aMap; // 地图控制器
+    private boolean isFirstLoc = true;
+    private LatLng lastGPSLocation = null;
 
     // 设备信息显示组件
     private DeviceInfoCard deviceInfoCard; // 设备状态信息卡片
@@ -159,6 +162,7 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
         // 地图组件初始化
         initMap(savedInstanceState);
 
+
         // 摇杆控制器初始化
         JoystickView joystickView = findViewById(R.id.joystick_view);
         UserSettings userSettings = new UserSettings(this);
@@ -181,9 +185,9 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
         updateConnectionStatusLight(false); // 默认为未连接状态
 
         // WebSocket连接状态监听
-        MainDeviceSocket.getInstance().setConnectionStatusListener(
-                this::updateConnectionStatusLight
-        );
+        MainDeviceSocket.getInstance().setConnectionStatusListener(this::updateConnectionStatusLight);
+        ShipDevicesSocket.getInstance().init(this);
+
     }
 
 
@@ -223,6 +227,7 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
         }
     }
 
+
     /**
      * 初始化地图配置
      * 包含以下关键配置：
@@ -252,18 +257,21 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
                 Log.d("MapInit", "AMap object initialized successfully.");
             }
         }
-
         // 地图UI定制配置
         aMap.getUiSettings().setLogoBottomMargin(-100); // 隐藏高德Logo
 
         // 定位样式配置
         MyLocationStyle myLocationStyle = new MyLocationStyle();
-        myLocationStyle.myLocationType(MyLocationStyle.LOCATION_TYPE_FOLLOW);
+        myLocationStyle.myLocationType(MyLocationStyle.LOCATION_TYPE_LOCATE); // 修改为一次定位
         myLocationStyle.interval(2000);
-        myLocationStyle.showMyLocation(true);
+        myLocationStyle.showMyLocation(true); // 修改为显示定位标记
         myLocationStyle.anchor(0.5f, 0.5f);
         aMap.setMyLocationStyle(myLocationStyle);
+
+        // 设置定位源
+        aMap.setLocationSource(this);
         aMap.setMyLocationEnabled(true);
+
         Log.d("MapInit", "MyLocationStyle and MyLocationEnabled set successfully.");
     }
 
@@ -511,17 +519,29 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
         mListener = listener;
         if (mlocationClient == null) {
             try {
+                Log.d("LocationSource", "激活定位客户端");
                 AMapLocationClientOption mLocationOption = new AMapLocationClientOption();
                 mLocationOption.setLocationMode(AMapLocationClientOption.AMapLocationMode.Hight_Accuracy);
+                // 设置定位间隔
+                mLocationOption.setInterval(2000);
+                // 设置是否返回地址信息
+                mLocationOption.setNeedAddress(true);
+                // 设置为单次定位
+                mLocationOption.setOnceLocation(false);
+
                 mlocationClient = new AMapLocationClient(this);
                 mlocationClient.setLocationListener(this);
                 mlocationClient.setLocationOption(mLocationOption);
                 mlocationClient.startLocation();
+
+                Log.d("LocationSource", "定位客户端已启动");
             } catch (Exception e) {
+                Log.e("LocationSource", "激活定位客户端失败: " + e.getMessage(), e);
                 throw new RuntimeException(e);
             }
         } else {
             mlocationClient.startLocation();
+            Log.d("LocationSource", "重新启动定位");
         }
     }
 
@@ -538,14 +558,9 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
         }
         mlocationClient = null;
     }
-
-    private boolean isFirstLoc = true;//判断是否第一次定位
-
-    /**
-     * 监听定位回调
-     */
     @Override
     public void onLocationChanged(AMapLocation aMapLocation) {
+        Log.d("AmapLocation", "收到定位回调");
         if (mListener != null && aMapLocation != null) {
             if (aMapLocation.getErrorCode() == 0) {
                 // 定位成功回调信息，设置相关消息
@@ -553,25 +568,39 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
                 double longitude = aMapLocation.getLongitude(); // 获取经度
                 String address = aMapLocation.getAddress(); // 获取地址信息
 
+                Log.d("AmapLocation", "定位成功: Lat=" + latitude + ", Lng=" + longitude + ", Address=" + address);
+
                 // 更新当前定位点
-                //当前定位
                 LatLng currentLatLng = new LatLng(latitude, longitude);
 
-                // 判断定位点是否在当前地图显示范围内
-                if (aMap != null && !aMap.getProjection().getVisibleRegion().latLngBounds.contains(currentLatLng)) {
-                    // 如果定位点不在当前地图显示范围内，则更新地图中心点
-                    CameraUpdate cameraUpdate = CameraUpdateFactory.newLatLngZoom(currentLatLng, 3); // 设置缩放级别为最大值
-                    aMap.moveCamera(cameraUpdate);
-                }
+                // 如果是首次定位或者没有收到GPS数据，使用设备本身定位作为地图中心点
+                if (isFirstLoc || lastGPSLocation == null) {
+                    Log.d("AmapLocation", "更新地图原点为当前位置");
 
-                // 如果是第一次定位，通知监听器
-                if (isFirstLoc) {
+                    if (aMap != null) {
+                        // 移动地图中心点到当前位置
+                        CameraUpdate cameraUpdate = CameraUpdateFactory.newLatLngZoom(currentLatLng, 16);
+                        aMap.moveCamera(cameraUpdate);
+
+                        // 更新定位标记样式
+                        MyLocationStyle myLocationStyle = aMap.getMyLocationStyle();
+                        if (myLocationStyle == null) {
+                            myLocationStyle = new MyLocationStyle();
+                            myLocationStyle.myLocationType(MyLocationStyle.LOCATION_TYPE_LOCATE);
+                            myLocationStyle.interval(2000);
+                            myLocationStyle.anchor(0.5f, 0.5f);
+                        }
+                        myLocationStyle.showMyLocation(true);
+                        aMap.setMyLocationStyle(myLocationStyle);
+                    }
+
+                    // 确保通知定位监听器
                     mListener.onLocationChanged(aMapLocation);
                     isFirstLoc = false;
+                } else {
+                    // 已经有GPS定位或非首次定位，仅更新位置不移动地图
+                    mListener.onLocationChanged(aMapLocation);
                 }
-
-                // 添加详细的日志输出
-                Log.d("AmapLocation", "Location updated: Lat=" + latitude + ", Lng=" + longitude + ", Address=" + address);
             } else {
                 // 显示错误信息
                 Log.e("AmapError", "location Error, ErrCode:"
@@ -580,6 +609,56 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
             }
         }
     }
+
+    /**
+     * 更新地图中的定位点位置
+     * 此方法在收到GPS坐标后被调用，更新地图位置
+     *
+     * @param latitude  纬度
+     * @param longitude 经度
+     */
+    public void updateMapLocation(double latitude, double longitude) {
+        if (aMap == null) return;
+
+        runOnUiThread(() -> {
+            try {
+                // 创建定位点
+                LatLng location = new LatLng(latitude, longitude);
+                lastGPSLocation = location;  // 更新最后接收的GPS坐标
+
+                // 更新地图中心点
+                CameraUpdate cameraUpdate = CameraUpdateFactory.newLatLngZoom(location, 16);
+                aMap.moveCamera(cameraUpdate);
+
+                // 获取当前的定位样式
+                MyLocationStyle myLocationStyle = aMap.getMyLocationStyle();
+                if (myLocationStyle == null) {
+                    myLocationStyle = new MyLocationStyle();
+                }
+
+                // 设置样式为显示定位标记
+                myLocationStyle.showMyLocation(true);
+                aMap.setMyLocationStyle(myLocationStyle);
+
+                // 创建模拟定位对象
+                AMapLocation aMapLocation = new AMapLocation("GPS");
+                aMapLocation.setLatitude(latitude);
+                aMapLocation.setLongitude(longitude);
+                aMapLocation.setAccuracy(5.0f);
+
+                // 通知监听器更新位置
+                if (mListener != null) {
+                    mListener.onLocationChanged(aMapLocation);
+                }
+
+                Log.d("GPS", "地图位置已更新: Lat=" + latitude + ", Lng=" + longitude);
+            } catch (Exception e) {
+                Log.e("GPS", "更新地图位置失败: " + e.getMessage(), e);
+            }
+        });
+    }
+// ... existing code ...
+
 
     /**
      * 生命周期-onDestroy
@@ -596,8 +675,8 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
             ));
         }
 
-        // 断开WebSocket连接
-        MainDeviceSocket.getInstance().disconnect();
+        // 断开WebSocket连接 - 使用强制断开模式
+        MainDeviceSocket.getInstance().disconnect(true);
         // 停止控制命令发送
         JoySticksDecoder.getInstance().stop();
         if (mMapView != null) {
@@ -607,12 +686,19 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
     }
 
 
+
     @Override
     protected void onResume() {
         super.onResume();
         if (mMapView != null) {
             mMapView.onResume(); // 确保调用 onResume 方法
         }
+
+        // 恢复定位
+        if (mlocationClient != null && mListener != null) {
+            mlocationClient.startLocation();
+        }
+
         Log.d("MapLifecycle", "MapView onResume called.");
         // 检查WebSocket连接状态并更新指示灯
         boolean isConnected = MainDeviceSocket.getInstance().isConnected();
