@@ -187,7 +187,25 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
         // WebSocket连接状态监听
         MainDeviceSocket.getInstance().setConnectionStatusListener(this::updateConnectionStatusLight);
         ShipDevicesSocket.getInstance().init(this);
+        applyUserSettings();
+    }
 
+    /**
+     * 加载并应用用户设置到摇杆解码器
+     */
+    private void applyUserSettings() {
+        UserSettings userSettings = new UserSettings(this);
+
+        // 应用滤波器设置
+        int filterType = userSettings.getFilterType();
+        float filterAlpha = userSettings.getFilterAlpha();
+        JoySticksDecoder.getInstance().setFilterType(filterType, filterAlpha);
+
+        // 应用方向变化延迟设置
+        long directionChangeDelay = userSettings.getDirectionChangeDelay();
+        JoySticksDecoder.getInstance().setDirectionChangeDelay(directionChangeDelay);
+
+        // 其他设置如有需要也可以在这里应用
     }
 
 
@@ -558,6 +576,10 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
         }
         mlocationClient = null;
     }
+
+    /**
+     * 监听定位回调
+     */
     @Override
     public void onLocationChanged(AMapLocation aMapLocation) {
         Log.d("AmapLocation", "收到定位回调");
@@ -578,8 +600,11 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
                     Log.d("AmapLocation", "更新地图原点为当前位置");
 
                     if (aMap != null) {
-                        // 移动地图中心点到当前位置
-                        CameraUpdate cameraUpdate = CameraUpdateFactory.newLatLngZoom(currentLatLng, 16);
+                        // 获取当前缩放等级，如果是首次定位则使用默认值16
+                        float zoomLevel = isFirstLoc ? 16f : aMap.getCameraPosition().zoom;
+
+                        // 移动地图中心点到当前位置，保持当前缩放等级
+                        CameraUpdate cameraUpdate = CameraUpdateFactory.newLatLngZoom(currentLatLng, zoomLevel);
                         aMap.moveCamera(cameraUpdate);
 
                         // 更新定位标记样式
@@ -619,45 +644,40 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
      */
     public void updateMapLocation(double latitude, double longitude) {
         if (aMap == null) return;
-
         runOnUiThread(() -> {
             try {
                 // 创建定位点
                 LatLng location = new LatLng(latitude, longitude);
                 lastGPSLocation = location;  // 更新最后接收的GPS坐标
+                // 获取当前缩放等级
+                float currentZoom = aMap.getCameraPosition().zoom;
 
-                // 更新地图中心点
-                CameraUpdate cameraUpdate = CameraUpdateFactory.newLatLngZoom(location, 16);
+                // 更新地图中心点，保持当前缩放等级
+                CameraUpdate cameraUpdate = CameraUpdateFactory.newLatLngZoom(location, currentZoom);
                 aMap.moveCamera(cameraUpdate);
-
                 // 获取当前的定位样式
                 MyLocationStyle myLocationStyle = aMap.getMyLocationStyle();
                 if (myLocationStyle == null) {
                     myLocationStyle = new MyLocationStyle();
                 }
-
                 // 设置样式为显示定位标记
                 myLocationStyle.showMyLocation(true);
                 aMap.setMyLocationStyle(myLocationStyle);
-
                 // 创建模拟定位对象
                 AMapLocation aMapLocation = new AMapLocation("GPS");
                 aMapLocation.setLatitude(latitude);
                 aMapLocation.setLongitude(longitude);
                 aMapLocation.setAccuracy(5.0f);
-
                 // 通知监听器更新位置
                 if (mListener != null) {
                     mListener.onLocationChanged(aMapLocation);
                 }
-
-                Log.d("GPS", "地图位置已更新: Lat=" + latitude + ", Lng=" + longitude);
+                Log.d("GPS", "地图位置已更新: Lat=" + latitude + ", Lng=" + longitude + ", 缩放等级=" + currentZoom);
             } catch (Exception e) {
                 Log.e("GPS", "更新地图位置失败: " + e.getMessage(), e);
             }
         });
     }
-// ... existing code ...
 
 
     /**
