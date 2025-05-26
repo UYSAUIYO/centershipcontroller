@@ -19,3 +19,8 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+-keep class org.qnwebrtc.** {*;}
+-dontwarn org.qnwebrtc.**
+-keep class com.qiniu.droid.rtc.**{*;}
+-keep class com.qiniu.droid.qcrash.**{*;}
+-keep interface com.qiniu.droid.rtc.**{*;}

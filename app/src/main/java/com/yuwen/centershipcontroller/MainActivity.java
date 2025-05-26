@@ -12,7 +12,6 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.activity.result.ActivityResultLauncher;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
@@ -30,6 +29,7 @@ import com.amap.api.maps.MapsInitializer;
 import com.amap.api.maps.model.LatLng;
 import com.amap.api.maps.model.MyLocationStyle;
 import com.amap.api.services.core.ServiceSettings;
+import com.qiniu.droid.rtc.QNRTC;
 import com.yuwen.centershipcontroller.Activity.QR_codeScannerActivity;
 import com.yuwen.centershipcontroller.Activity.SettingsActivity;
 import com.yuwen.centershipcontroller.Component.CustomDialog;
@@ -50,19 +50,19 @@ import pub.devrel.easypermissions.EasyPermissions;
  * 2. 设备控制与状态监控
  * 3. 用户交互与界面管理
  * 4. 权限请求与生命周期管理
- * 
+ *
  * @author Yuwen
  * @version 1.0 2023-10-01
  */
 public class MainActivity extends AppCompatActivity implements LocationSource, AMapLocationListener {
     private static final String TAG = "MainActivity";
-    
+    public static MainActivity Instance;
+    private String mToken; // 你需要从你的服务器获取token
+
     // 权限请求码定义
     private static final int REQUEST_PERMISSIONS = 9527; // 定位相关权限请求码
     private static final int REQUEST_CAMERA_PERMISSION = 9528; // 摄像头权限请求码
     private static final int REQUEST_QR_SCAN = 9529; // 二维码扫描请求码
-
-    private ActivityResultLauncher<Intent> qrCodeScannerLauncher;
 
     // 地图相关成员变量
     private MapView mMapView; // 地图视图组件
@@ -162,7 +162,6 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
         // 地图组件初始化
         initMap(savedInstanceState);
 
-
         // 摇杆控制器初始化
         JoystickView joystickView = findViewById(R.id.joystick_view);
         UserSettings userSettings = new UserSettings(this);
@@ -188,6 +187,9 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
         MainDeviceSocket.getInstance().setConnectionStatusListener(this::updateConnectionStatusLight);
         ShipDevicesSocket.getInstance().init(this);
         applyUserSettings();
+        Instance = this;
+
+
     }
 
     /**
@@ -207,6 +209,7 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
 
         // 其他设置如有需要也可以在这里应用
     }
+
 
 
     /**
@@ -300,7 +303,7 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
     @AfterPermissionGranted(REQUEST_CAMERA_PERMISSION)
     public void requestCameraPermission() {
         String[] perms = new String[]{
-                Manifest.permission.CAMERA, 
+                Manifest.permission.CAMERA,
                 Manifest.permission.READ_MEDIA_IMAGES
         };
         if (EasyPermissions.hasPermissions(this, perms)) {
@@ -681,7 +684,7 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
 
 
     /**
-     * 生命周期-onDestroy
+     * 隐藏视频悬浮窗口
      */
     @Override
     protected void onDestroy() {
@@ -703,6 +706,7 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
             mMapView.onDestroy(); // 确保调用 onDestroy 方法
         }
         Log.d("MapLifecycle", "MapView onDestroy called.");
+        QNRTC.deinit();
     }
 
 
@@ -719,6 +723,7 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
             mlocationClient.startLocation();
         }
 
+
         Log.d("MapLifecycle", "MapView onResume called.");
         // 检查WebSocket连接状态并更新指示灯
         boolean isConnected = MainDeviceSocket.getInstance().isConnected();
@@ -733,6 +738,7 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
         if (mMapView != null) {
             mMapView.onPause(); // 确保调用 onPause 方法
         }
+
         Log.d("MapLifecycle", "MapView onPause called.");
     }
 

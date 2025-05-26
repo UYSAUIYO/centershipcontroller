@@ -1,9 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:id="@+id/main_activity"
     xmlns:app="http://schemas.android.com/apk/res-auto">
-    <!-- 地图组件，设置为布局底层 -->
+
+<!--     地图组件，设置为布局底层 -->
     <com.amap.api.maps.MapView
         android:id="@+id/map"
         android:layout_width="0dp"
@@ -13,8 +16,26 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
     </com.amap.api.maps.MapView>
-    <!-- 参数显示容器 -->
+<!--     参数显示容器 -->
 
+
+    <com.qiniu.droid.rtc.QNSurfaceView
+        android:id="@+id/local_surface_view"
+        android:layout_width="150dp"
+        android:layout_height="150dp"
+        tools:layout_editor_absoluteX="273dp"
+        tools:layout_editor_absoluteY="534dp" />
+
+    <com.qiniu.droid.rtc.QNSurfaceView
+        android:id="@+id/remote_surface_view"
+        android:layout_width="233dp"
+        android:layout_height="231dp"
+        android:layout_marginStart="40dp"
+        android:layout_marginTop="296dp"
+        app:layout_constraintBottom_toTopOf="@+id/device_card"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="0.73" />
 
     <com.yuwen.centershipcontroller.Views.JoystickView
         android:id="@+id/joystick_view"

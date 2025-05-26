@@ -14,4 +14,6 @@
     <string name="content">消息内容</string>
     <string name="cancel">取消</string>
     <string name="OK">确定</string>
+    <!-- TODO: Remove or change this placeholder text -->
+    <string name="hello_blank_fragment">Hello blank fragment</string>
 </resources>

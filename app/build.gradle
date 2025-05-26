@@ -53,4 +53,7 @@ dependencies {
     implementation libs.dialogx
     implementation libs.utilcodex
     implementation libs.zxing.lite
+    
+    // WebRTC依赖
+    implementation libs.webrtc
 }
