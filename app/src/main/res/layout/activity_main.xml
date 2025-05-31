@@ -19,24 +19,6 @@
 <!--     参数显示容器 -->
 
 
-    <com.qiniu.droid.rtc.QNSurfaceView
-        android:id="@+id/local_surface_view"
-        android:layout_width="150dp"
-        android:layout_height="150dp"
-        tools:layout_editor_absoluteX="273dp"
-        tools:layout_editor_absoluteY="534dp" />
-
-    <com.qiniu.droid.rtc.QNSurfaceView
-        android:id="@+id/remote_surface_view"
-        android:layout_width="233dp"
-        android:layout_height="231dp"
-        android:layout_marginStart="40dp"
-        android:layout_marginTop="296dp"
-        app:layout_constraintBottom_toTopOf="@+id/device_card"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintVertical_bias="0.73" />
-
     <com.yuwen.centershipcontroller.Views.JoystickView
         android:id="@+id/joystick_view"
         android:layout_width="300dp"

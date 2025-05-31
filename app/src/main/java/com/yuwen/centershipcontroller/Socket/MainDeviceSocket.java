@@ -54,8 +54,8 @@ public class MainDeviceSocket {
     private static final int RECONNECT_INTERVAL = 5000; // 重连间隔时间（毫秒）
     private Handler reconnectHandler = new Handler(Looper.getMainLooper());
     private Runnable reconnectRunnable; // 重连任务
+    private boolean hasShownSuccessDialog = false; // 是否已经显示过连接成功对话框
 
-    // 私有构造函数
     // 私有构造函数
     private MainDeviceSocket() {
         webSocketManager = WebSocketManager.getInstance();
@@ -343,6 +343,8 @@ public class MainDeviceSocket {
                 // 如果之前在重连中，并且现在找到了设备，取消重连状态
                 if (isReconnecting) {
                     stopReconnecting();
+                    // 重置对话框显示状态，这样重连成功后可以再次显示
+                    hasShownSuccessDialog = false;
                 }
 
                 // 在主线程更新UI并显示对话框（仅在首次连接或重新连接时）
@@ -351,9 +353,15 @@ public class MainDeviceSocket {
                         try {
                             // 1. 先更新设备信息卡
                             updateDeviceInfoCard();
-                            // 2. 然后显示连接成功对话框
-                            showDeviceInfoDialog();
-                            Log.d(TAG, "已更新UI和显示对话框");
+                            
+                            // 2. 如果还没有显示过连接成功对话框，则显示
+                            if (!hasShownSuccessDialog) {
+                                showDeviceInfoDialog();
+                                hasShownSuccessDialog = true;
+                            }
+                            
+                            Log.d(TAG, "已更新UI" + (hasShownSuccessDialog ? "" : "和显示对话框"));
+                            
                             // 3. 确保心跳检测正在运行
                             if (!heartbeatActive) {
                                 startHeartbeat();
@@ -484,6 +492,8 @@ public class MainDeviceSocket {
             if (reconnectHandler != null && reconnectRunnable != null) {
                 reconnectHandler.removeCallbacks(reconnectRunnable);
             }
+            // 重置对话框显示状态，这样重连成功后可以再次显示
+            hasShownSuccessDialog = false;
         }
     }
     /**
@@ -671,6 +681,10 @@ public class MainDeviceSocket {
         }
         isConnected = false;
         notifyConnectionStatusChanged();
+        
+        // 重置对话框显示状态
+        hasShownSuccessDialog = false;
+        
         Log.d(TAG, "WebSocket连接已断开");
     }
 

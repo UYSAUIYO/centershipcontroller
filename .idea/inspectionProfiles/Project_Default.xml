@@ -61,34 +61,6 @@
     <inspection_tool class="AlibabaUnsupportedExceptionWithModifyAsList" enabled="true" level="WARNING" enabled_by_default="true" />
     <inspection_tool class="AlibabaUseQuietReferenceNotation" enabled="true" level="WARNING" enabled_by_default="true" />
     <inspection_tool class="AlibabaUseRightCaseForDateFormat" enabled="true" level="WARNING" enabled_by_default="true" />
-    <inspection_tool class="AndroidLintDetachAndAttachSameFragment" enabled="true" level="WARNING" enabled_by_default="true" />
-    <inspection_tool class="AndroidLintDialogFragmentCallbacksDetector" enabled="true" level="WARNING" enabled_by_default="true" />
-    <inspection_tool class="AndroidLintExperimentalAnnotationRetention" enabled="true" level="ERROR" enabled_by_default="true" />
-    <inspection_tool class="AndroidLintFragmentAddMenuProvider" enabled="true" level="ERROR" enabled_by_default="true" />
-    <inspection_tool class="AndroidLintFragmentBackPressedCallback" enabled="true" level="ERROR" enabled_by_default="true" />
-    <inspection_tool class="AndroidLintFragmentLiveDataObserve" enabled="true" level="ERROR" enabled_by_default="true" />
-    <inspection_tool class="AndroidLintFragmentTagUsage" enabled="true" level="WARNING" enabled_by_default="true" />
-    <inspection_tool class="AndroidLintInvalidFragmentVersionForActivityResult" enabled="true" level="ERROR" enabled_by_default="true" />
-    <inspection_tool class="AndroidLintInvalidUseOfOnBackPressed" enabled="true" level="WARNING" enabled_by_default="true" />
-    <inspection_tool class="AndroidLintNullSafeMutableLiveData" enabled="true" level="ERROR" enabled_by_default="true" />
-    <inspection_tool class="AndroidLintRepeatOnLifecycleWrongUsage" enabled="true" level="ERROR" enabled_by_default="true" />
-    <inspection_tool class="AndroidLintUnsafeLifecycleWhenUsage" enabled="true" level="ERROR" enabled_by_default="true" />
-    <inspection_tool class="AndroidLintUnsafeOptInUsageError" enabled="true" level="ERROR" enabled_by_default="true" />
-    <inspection_tool class="AndroidLintUnsafeOptInUsageWarning" enabled="true" level="WARNING" enabled_by_default="true" />
-    <inspection_tool class="AndroidLintUnsafeRepeatOnLifecycleDetector" enabled="true" level="ERROR" enabled_by_default="true" />
-    <inspection_tool class="AndroidLintUseAndroidAlpha" enabled="true" level="ERROR" enabled_by_default="true" />
-    <inspection_tool class="AndroidLintUseAppTint" enabled="true" level="ERROR" enabled_by_default="true" />
-    <inspection_tool class="AndroidLintUseCompatLoadingForColorStateLists" enabled="true" level="WARNING" enabled_by_default="true" />
-    <inspection_tool class="AndroidLintUseCompatLoadingForDrawables" enabled="true" level="WARNING" enabled_by_default="true" />
-    <inspection_tool class="AndroidLintUseCompatTextViewDrawableApis" enabled="true" level="WARNING" enabled_by_default="true" />
-    <inspection_tool class="AndroidLintUseCompatTextViewDrawableXml" enabled="true" level="WARNING" enabled_by_default="true" />
-    <inspection_tool class="AndroidLintUseGetLayoutInflater" enabled="true" level="WARNING" enabled_by_default="true" />
-    <inspection_tool class="AndroidLintUseRequireInsteadOfGet" enabled="true" level="ERROR" enabled_by_default="true" />
-    <inspection_tool class="AndroidLintUseSupportActionBar" enabled="true" level="WARNING" enabled_by_default="true" />
-    <inspection_tool class="AndroidLintUseSwitchCompatOrMaterialCode" enabled="true" level="WARNING" enabled_by_default="true" />
-    <inspection_tool class="AndroidLintUseSwitchCompatOrMaterialXml" enabled="true" level="WARNING" enabled_by_default="true" />
-    <inspection_tool class="AndroidLintUsingOnClickInXml" enabled="true" level="WARNING" enabled_by_default="true" />
-    <inspection_tool class="AndroidLintWrongRequiresOptIn" enabled="true" level="ERROR" enabled_by_default="true" />
     <inspection_tool class="ControlFlowStatementWithoutBraces" enabled="false" level="INFORMATION" enabled_by_default="false" />
     <inspection_tool class="MapOrSetKeyShouldOverrideHashCodeEquals" enabled="true" level="WARNING" enabled_by_default="true" />
   </profile>

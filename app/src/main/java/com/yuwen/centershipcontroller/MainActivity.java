@@ -29,7 +29,6 @@ import com.amap.api.maps.MapsInitializer;
 import com.amap.api.maps.model.LatLng;
 import com.amap.api.maps.model.MyLocationStyle;
 import com.amap.api.services.core.ServiceSettings;
-import com.qiniu.droid.rtc.QNRTC;
 import com.yuwen.centershipcontroller.Activity.QR_codeScannerActivity;
 import com.yuwen.centershipcontroller.Activity.SettingsActivity;
 import com.yuwen.centershipcontroller.Component.CustomDialog;
@@ -63,7 +62,6 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
     private static final int REQUEST_PERMISSIONS = 9527; // 定位相关权限请求码
     private static final int REQUEST_CAMERA_PERMISSION = 9528; // 摄像头权限请求码
     private static final int REQUEST_QR_SCAN = 9529; // 二维码扫描请求码
-
     // 地图相关成员变量
     private MapView mMapView; // 地图视图组件
     private AMap aMap; // 地图控制器
@@ -512,7 +510,9 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
                 Manifest.permission.ACCESS_COARSE_LOCATION,
                 Manifest.permission.ACCESS_FINE_LOCATION,
                 Manifest.permission.READ_PHONE_STATE,
-                Manifest.permission.WRITE_EXTERNAL_STORAGE
+                Manifest.permission.WRITE_EXTERNAL_STORAGE,
+                Manifest.permission.CAMERA,
+                Manifest.permission.RECORD_AUDIO
         };
 
         if (EasyPermissions.hasPermissions(this, permissions)) {
@@ -706,7 +706,6 @@ public class MainActivity extends AppCompatActivity implements LocationSource, A
             mMapView.onDestroy(); // 确保调用 onDestroy 方法
         }
         Log.d("MapLifecycle", "MapView onDestroy called.");
-        QNRTC.deinit();
     }
 
 
