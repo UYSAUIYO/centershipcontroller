@@ -24,6 +24,7 @@ public class JoystickView extends View {
     // 坐标系定义
     private static final float MIN_OUTPUT = -1.0f;
     private static final float MAX_OUTPUT = 1.0f;
+    private static final float MAX_THRUST_RATIO = 0.30f; // 最大推力比例，对应30%的最大值
     private static final long UPDATE_INTERVAL = 100; // 新增常量：更新间隔时间（单位：毫秒）
     private final Paint debugPaint = new Paint();
     // 交互参数
@@ -135,6 +136,14 @@ public class JoystickView extends View {
         // 标准化输出
         normalizedX = (effectiveDistance / maxDistance) * (float) Math.cos(angle);
         normalizedY = (effectiveDistance / maxDistance) * (float) Math.sin(angle);
+        
+        // 应用最大推力限制
+        float magnitude = (float) Math.hypot(normalizedX, normalizedY);
+        if (magnitude > MAX_THRUST_RATIO) {
+            float scaleFactor = MAX_THRUST_RATIO / magnitude;
+            normalizedX *= scaleFactor;
+            normalizedY *= scaleFactor;
+        }
 
         // 约束输出范围
         normalizedX = clamp(normalizedX, MIN_OUTPUT, MAX_OUTPUT);

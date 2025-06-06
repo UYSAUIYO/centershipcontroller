@@ -48,6 +48,7 @@ public class JoySticksDecoder {
     }
     // 配置参数 - 高性能设置
     private static final float CENTER_DEAD_ZONE = 0.05f; // 减小死区以提高响应性
+    private static final int MAX_THRUST_POWER = 30; // 最大推力限制为30
 
     // 使用原子引用替代锁
     private final AtomicReference<JoystickInput> latestInput = new AtomicReference<>();
@@ -135,21 +136,21 @@ public class JoySticksDecoder {
         // 缓存零命令
         commandCache.put("zero", ControlCommand.createZeroCommand());
 
-        // 缓存常用前进命令 (10%-100%, 每10%一档)
-        for (int power = 10; power <= 100; power += 10) {
+        // 缓存常用前进命令 (10%-30%, 每10%一档)
+        for (int power = 10; power <= MAX_THRUST_POWER; power += 10) {
             String key = "forward_" + power;
             commandCache.put(key, new ControlCommand(power, power, 1, 1, 0, 0, false));
         }
 
         // 缓存常用后退命令
-        for (int power = 10; power <= 100; power += 10) {
+        for (int power = 10; power <= MAX_THRUST_POWER; power += 10) {
             String key = "backward_" + power;
             commandCache.put(key, new ControlCommand(power, power, 0, 0, 0, 0, false));
         }
 
         // 缓存常用转向命令 (左转和右转，几个常用的转向比例)
         int[] turns = {25, 50, 75};
-        for (int power = 30; power <= 100; power += 30) {
+        for (int power = 10; power <= MAX_THRUST_POWER; power += 10) {
             for (int turn : turns) {
                 // 左转命令 (降低左侧推力)
                 int leftPower = power * (100 - turn) / 100;
@@ -427,7 +428,7 @@ public class JoySticksDecoder {
             int thrustPower = (int) (length * 100);
 
             // 限制推力范围
-            thrustPower = Math.min(100, Math.max(0, thrustPower));
+            thrustPower = Math.min(MAX_THRUST_POWER, Math.max(0, thrustPower));
 
             // 检查是否为零输入状态 - 降低阈值提高响应性
             if (thrustPower < 3) {
@@ -448,7 +449,7 @@ public class JoySticksDecoder {
                 }
             } else {
                 // 转向，尝试使用缓存
-                int roundedPower = Math.round(thrustPower / 30f) * 30; // 舍入到最近的30的倍数
+                int roundedPower = Math.round(thrustPower / 10f) * 10; // 舍入到最近的10的倍数
                 int turnPercent = Math.round(Math.abs(x) * 100 / 4) * 25; // 转向百分比(25, 50, 75)
                 if (turnPercent > 75) turnPercent = 75;
                 String key = (x < 0 ? "left_" : "right_") + roundedPower + "_" + turnPercent;

@@ -342,6 +342,7 @@ public class DeviceInfoCard extends FrameLayout {
         actionButton.setText(text);
     }
 
+
     /**
      * 设置设备类型
      *
